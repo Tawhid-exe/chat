@@ -367,34 +367,32 @@ function randomCode()    { return String(Math.floor(100000 + Math.random() * 900
 // ─────────────────────────────────────────────
 //  INIT
 // ─────────────────────────────────────────────
-window.addEventListener('load', () => initPeer());
+window.addEventListener('load', async () => { await initPeer(); });
 
-function initPeer(customId) {
+const SIGNAL_SERVER = 'chat-st99.onrender.com';
+
+async function initPeer(customId) {
+    // Fetch TURN credentials from our own signaling server
+    let iceServers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+    ];
+    try {
+        const res = await fetch(`https://${SIGNAL_SERVER}/turn-credentials`);
+        const data = await res.json();
+        iceServers = data.iceServers;
+        console.log('TURN credentials loaded ✅');
+    } catch (e) {
+        console.warn('TURN fetch failed, STUN only:', e);
+    }
+
     const options = {
-        // Use PeerJS cloud with explicit host settings for reliability
-        host: 'chat-st99.onrender.com', // 👈 replace with your Render URL
+        host: SIGNAL_SERVER,
         port: 443,
         secure: true,
         path: '/peerjs',
         debug: 0,
-        config: {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:global.stun.twilio.com:3478' },
-                {
-                    urls: [
-                        'turn:a.relay.metered.ca:80',
-                        'turn:a.relay.metered.ca:80?transport=tcp',
-                        'turn:a.relay.metered.ca:443',
-                        'turn:a.relay.metered.ca:443?transport=tcp'
-                    ],
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                }
-            ]
-        }
+        config: { iceServers }
     };
 
     peer = new Peer(customId || undefined, options);
@@ -458,7 +456,7 @@ function initPeer(customId) {
 // ─────────────────────────────────────────────
 //  CREATE ROOM
 // ─────────────────────────────────────────────
-function createRoom() {
+async function createRoom() {
     myCode = randomCode();
     const peerId = codeToId(myCode);
 
@@ -471,7 +469,7 @@ function createRoom() {
     document.getElementById('createBtn').disabled = true;
     document.getElementById('joinBtn').disabled   = true;
 
-    initPeer(peerId);
+    await initPeer(peerId);
 }
 
 // ─────────────────────────────────────────────
