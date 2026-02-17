@@ -1,5 +1,5 @@
 const express = require('express');
-const { PeerServer } = require('peer');
+const { ExpressPeerServer } = require('peer');
 
 const app = express();
 
@@ -9,10 +9,11 @@ const server = app.listen(process.env.PORT || 3000, () => {
     console.log(`Server running on port ${process.env.PORT || 3000}`);
 });
 
-const peerServer = PeerServer({
-    server: server,
-    path: '/peerjs'
+const peerServer = ExpressPeerServer(server, {
+    allow_discovery: false
 });
+
+app.use('/peerjs', peerServer);
 
 peerServer.on('connection', (client) => {
     console.log('Peer connected:', client.getId());
