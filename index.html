@@ -283,6 +283,10 @@
     <!-- SETUP -->
     <div id="setupScreen">
 
+        <div id="serverStatus">
+            <div class="pill loading">⏳ Connecting to network…</div>
+        </div>
+
         <div class="btn-row">
             <button class="btn-primary" id="createBtn" onclick="createRoom()" disabled>Create Room</button>
             <button class="btn-secondary" id="joinBtn" onclick="toggleJoin()" disabled>Join Room</button>
@@ -367,36 +371,57 @@ window.addEventListener('load', () => initPeer());
 
 function initPeer(customId) {
     const options = {
+        // Use PeerJS cloud with explicit host settings for reliability
+        host: '0.peerjs.com',
+        port: 443,
+        secure: true,
+        path: '/',
+        debug: 0,
         config: {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:global.stun.twilio.com:3478' }
             ]
         }
     };
 
-    if (customId) options.id = customId;
-
     peer = new Peer(customId || undefined, options);
 
+    // Safety timeout — if open hasn't fired in 8s, try again
+    const openTimeout = setTimeout(() => {
+        if (!peer || peer.disconnected) {
+            console.warn('PeerJS open timeout, retrying…');
+            peer && peer.destroy();
+            initPeer(customId);
+        }
+    }, 8000);
+
     peer.on('open', id => {
+        clearTimeout(openTimeout);
         console.log('Peer open:', id);
         document.getElementById('createBtn').disabled = false;
         document.getElementById('joinBtn').disabled   = false;
+        document.getElementById('serverStatus').innerHTML = '<div class="pill ok">✅ Ready — create or join a room</div>';
+        setTimeout(() => { document.getElementById('serverStatus').innerHTML = ''; }, 2500);
     });
 
     peer.on('connection', incoming => {
-        // Creator receives connection from joiner
         conn = incoming;
         wireConn();
     });
 
+    peer.on('disconnected', () => {
+        console.warn('Peer disconnected from server, reconnecting…');
+        if (peer && !peer.destroyed) peer.reconnect();
+    });
+
     peer.on('error', err => {
+        clearTimeout(openTimeout);
         console.error('Peer error:', err.type, err);
 
         if (err.type === 'unavailable-id') {
-            // Code collision — try a new code
             peer.destroy();
             const newCode = randomCode();
             myCode = newCode;
@@ -410,8 +435,12 @@ function initPeer(customId) {
             return;
         }
 
-        if (err.type === 'network' || err.type === 'server-error') {
-            setJoinStatus('Network error — check your connection and refresh.', 'error');
+        if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed') {
+            document.getElementById('serverStatus').innerHTML =
+                '<div class="pill error">⚠️ Could not reach signaling server. Check your internet and <a href="" style="color:inherit">refresh</a>.</div>';
+            // Still enable buttons so user can retry manually
+            document.getElementById('createBtn').disabled = false;
+            document.getElementById('joinBtn').disabled   = false;
         }
     });
 }
@@ -581,50 +610,4 @@ async function sendFile() {
             bytes: Array.from(new Uint8Array(slice))
         });
 
-        updateProgress(progressId, Math.round(((i + 1) / totalChunks) * 100));
-
-        // Yield every 8 chunks so the UI doesn't freeze
-        if (i % 8 === 0) await sleep(0);
-    }
-}
-
-function assembleFile() {
-    const meta  = incomingFile;
-    const total = incomingChunks.reduce((s, c) => s + c.length, 0);
-    const combined = new Uint8Array(total);
-    let off = 0;
-    for (const chunk of incomingChunks) {
-        combined.set(chunk, off);
-        off += chunk.length;
-    }
-
-    const blob = new Blob([combined], { type: meta.mime });
-    const url  = URL.createObjectURL(blob);
-
-    // Replace progress with download button
-    const el = document.getElementById(meta._progressId);
-    if (el) {
-        el.innerHTML = buildFileHTML(meta.name, meta.size, '✅ Tap to download');
-        el.onclick = () => triggerDownload(url, meta.name);
-    }
-
-    incomingFile     = null;
-    incomingChunks   = [];
-    incomingReceived = 0;
-}
-
-// ─────────────────────────────────────────────
-//  UI HELPERS
-// ─────────────────────────────────────────────
-function showChat() {
-    document.getElementById('setupScreen').classList.add('hidden');
-    document.getElementById('chatScreen').style.display = 'block';
-}
-
-function enableChat(on) {
-    document.getElementById('msgInput').disabled  = !on;
-    document.getElementById('sendBtn').disabled   = !on;
-    document.getElementById('attachBtn').disabled = !on;
-}
-
-function addMsg(text, 
+        updateProgress(progressId, Math.round(((i + 1) / totalChunks) * 100
