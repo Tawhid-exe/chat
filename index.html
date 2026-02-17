@@ -113,7 +113,6 @@
         .pill.ok      { background: #d4edda; color: #155724; }
         .pill.error   { background: #f8d7da; color: #721c24; }
         .pill.loading { background: #e7f3ff; color: #1565c0; }
-        .pill.p2p     { background: #e8f5e9; color: #2e7d32; }
 
         .info-box {
             background: #e7f3ff;
@@ -135,7 +134,7 @@
             margin-bottom: 6px;
         }
         .chat-header h3 { color: #667eea; font-size: 18px; }
-        .chat-subtext   { font-size: 11px; color: #aaa; margin-top: 2px; }
+        .chat-subtext   { font-size: 11px; color: #888; margin-top: 2px; }
 
         .btn-disconnect {
             padding: 8px 18px;
@@ -225,7 +224,6 @@
         }
         .input-row input:focus { outline: none; border-color: #667eea; }
         .input-row input:disabled { background: #f7f7f7; }
-
         .btn-send {
             padding: 12px 22px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -244,18 +242,6 @@
             min-width: auto;
         }
         .btn-attach:disabled, .btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
-
-        .transfer-badge {
-            font-size: 10px;
-            padding: 2px 7px;
-            border-radius: 10px;
-            margin-left: 6px;
-            font-weight: 600;
-            vertical-align: middle;
-        }
-        .badge-p2p { background: #e8f5e9; color: #2e7d32; }
-        .badge-relay { background: #fff3e0; color: #e65100; }
-
         .hidden { display: none !important; }
 
         @media (max-width: 520px) {
@@ -269,7 +255,7 @@
 <div class="container">
     <div class="header">
         <h1>🫏 DonkeyChat</h1>
-        <p>WebSocket chat · WebRTC file transfer — Any browser, any network</p>
+        <p>Instant Chat & File Sharing — Any browser, any network, anywhere</p>
     </div>
 
     <div id="setupScreen">
@@ -298,11 +284,8 @@
         </div>
 
         <div class="info-box">
-            💡 <strong>How it works:</strong>
-            Chat messages travel via WebSocket (instant, always works).
-            File transfers use WebRTC direct P2P (faster, no server bandwidth).
-            If P2P fails, files automatically fall back to WebSocket relay.<br><br>
-            ⚠️ <strong>File limit:</strong> 200 MB. Files over 50 MB may crash low-RAM devices.
+            💡 <strong>How it works:</strong> Share the 6-digit code with anyone. Chat and files are sent securely through your relay server — works on any network, any device.<br><br>
+            ⚠️ <strong>File limit:</strong> 200 MB max. Files over 50 MB may crash low-RAM devices.
         </div>
     </div>
 
@@ -310,7 +293,7 @@
         <div class="chat-header">
             <div>
                 <h3>💬 DonkeyChat</h3>
-                <div class="chat-subtext" id="connStatus">Chat: WebSocket ✅ &nbsp;|&nbsp; Files: Negotiating P2P…</div>
+                <div class="chat-subtext">🟢 Connected · Secure relay</div>
             </div>
             <button class="btn-disconnect" onclick="disconnect()">Disconnect</button>
         </div>
@@ -326,352 +309,135 @@
 </div>
 
 <script>
-// ════════════════════════════════════════════════
-//  CONFIG
-// ════════════════════════════════════════════════
+// ════════════════════════════════════════
+//  CONFIG — update if Render URL changes
+// ════════════════════════════════════════
 const WS_URL = 'wss://chat-st99.onrender.com';
 
-const RTC_CONFIG = {
-    iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        // Free TURN fallbacks
-        {
-            urls: [
-                'turn:a.relay.metered.ca:80',
-                'turn:a.relay.metered.ca:80?transport=tcp',
-                'turn:a.relay.metered.ca:443',
-                'turns:a.relay.metered.ca:443?transport=tcp'
-            ],
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-        }
-    ]
-};
-
-// ════════════════════════════════════════════════
+// ════════════════════════════════════════
 //  STATE
-// ════════════════════════════════════════════════
-let ws          = null;   // WebSocket to server
-let pc          = null;   // RTCPeerConnection
-let dc          = null;   // RTCDataChannel (for files)
-let myCode      = '';
-let wsConnected = false;  // ws to peer
-let p2pReady    = false;  // webrtc datachannel open
-let isCreator   = false;
+// ════════════════════════════════════════
+let ws        = null;
+let myCode    = '';
+let connected = false;
 
-// File receive state
 let incomingMeta   = null;
 let incomingChunks = [];
 let incomingCount  = 0;
 
-// ════════════════════════════════════════════════
-//  1. WEBSOCKET — always-on connection & chat
-// ════════════════════════════════════════════════
+// ════════════════════════════════════════
+//  WEBSOCKET
+// ════════════════════════════════════════
 function connectWS() {
     ws = new WebSocket(WS_URL);
 
     ws.onopen = () => {
-        console.log('WS open');
-        setServerStatus('✅ Ready', 'ok');
-        setTimeout(() => document.getElementById('serverStatus').innerHTML = '', 2000);
+        console.log('✅ WS connected');
+        document.getElementById('serverStatus').innerHTML =
+            '<div class="pill ok">✅ Ready</div>';
+        setTimeout(() => {
+            document.getElementById('serverStatus').innerHTML = '';
+        }, 2000);
         document.getElementById('createBtn').disabled = false;
         document.getElementById('joinBtn').disabled   = false;
     };
 
     ws.onmessage = (e) => {
         let msg;
-        try { msg = JSON.parse(e.data); } catch { return; }
-        handleWSMsg(msg);
+        try { msg = JSON.parse(e.data); } catch(err) { return; }
+        onServerMsg(msg);
     };
 
     ws.onclose = () => {
-        if (wsConnected) sysMsg('⚠️ Server connection lost. Refresh to reconnect.');
-        else setServerStatus('⚠️ Server offline. <a href="">Refresh</a>', 'error');
+        console.log('WS closed');
+        if (connected) {
+            sysMsg('⚠️ Connection lost. Please refresh.');
+        } else {
+            document.getElementById('serverStatus').innerHTML =
+                '<div class="pill error">⚠️ Cannot reach server. <a href="">Refresh</a></div>';
+        }
     };
 
-    ws.onerror = console.error;
+    ws.onerror = (err) => console.error('WS error:', err);
 }
 
-function handleWSMsg(msg) {
+// ════════════════════════════════════════
+//  MESSAGE HANDLER — single clean switch
+// ════════════════════════════════════════
+function onServerMsg(msg) {
     switch (msg.type) {
 
         case 'created':
-            console.log('Room created on server');
+            console.log('Room ready on server');
             break;
 
         case 'peer_joined':
-            wsConnected = true;
+            connected = true;
             showChat();
             enableChat(true);
-            sysMsg('✅ Peer connected via WebSocket. Negotiating P2P for files…');
-            // Start WebRTC negotiation
-            startWebRTC();
+            sysMsg('🔒 Peer connected! You can chat and send files.');
             break;
 
         case 'relay':
-            // Could be a chat message OR a WebRTC signal
-            const d = msg.data;
-            if (d.kind === 'chat') {
-                addMsg(d.text, 'received');
-            } else if (d.kind === 'rtc-offer') {
-                handleRTCOffer(d.offer);
-            } else if (d.kind === 'rtc-answer') {
-                handleRTCAnswer(d.answer);
-            } else if (d.kind === 'rtc-ice') {
-                handleRTCIce(d.candidate);
-            }
+            onRelayData(msg.data);
             break;
 
         case 'peer_left':
-            wsConnected = false;
-            p2pReady    = false;
+            connected = false;
             enableChat(false);
             sysMsg('⚠️ Peer disconnected.');
-            updateConnStatus();
             break;
 
         case 'error':
-            setJoinStatus(msg.msg || 'Error', 'error');
+            setJoinStatus(msg.msg || 'Unknown error', 'error');
             break;
     }
 }
 
-// Send via WebSocket relay
-function wsSend(data) {
+// ════════════════════════════════════════
+//  RELAY DATA HANDLER
+// ════════════════════════════════════════
+function onRelayData(data) {
+    if (!data) return;
+
+    switch (data.kind) {
+        case 'chat':
+            addMsg(data.text, 'received');
+            break;
+
+        case 'file-meta':
+            incomingMeta   = data;
+            incomingChunks = new Array(data.totalChunks);
+            incomingCount  = 0;
+            appendFileProgress(data);
+            break;
+
+        case 'file-chunk':
+            if (!incomingMeta) return;
+            incomingChunks[data.idx] = new Uint8Array(data.bytes);
+            incomingCount++;
+            updateProgress(
+                incomingMeta.id,
+                Math.round((incomingCount / incomingMeta.totalChunks) * 100)
+            );
+            if (incomingCount === incomingMeta.totalChunks) assembleFile();
+            break;
+    }
+}
+
+// ════════════════════════════════════════
+//  SEND HELPERS
+// ════════════════════════════════════════
+function relay(data) {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'relay', data }));
     }
 }
 
-// ════════════════════════════════════════════════
-//  2. WEBRTC — P2P data channel for file transfers
-// ════════════════════════════════════════════════
-function startWebRTC() {
-    pc = new RTCPeerConnection(RTC_CONFIG);
-
-    // ICE candidates → relay via WebSocket
-    pc.onicecandidate = ({ candidate }) => {
-        if (candidate) {
-            wsSend({ kind: 'rtc-ice', candidate });
-        }
-    };
-
-    pc.onconnectionstatechange = () => {
-        console.log('RTC state:', pc.connectionState);
-        if (pc.connectionState === 'connected') {
-            console.log('WebRTC P2P connected!');
-        }
-        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-            p2pReady = false;
-            updateConnStatus();
-            sysMsg('ℹ️ P2P unavailable — files will use server relay instead.');
-        }
-    };
-
-    if (isCreator) {
-        // Creator makes the data channel and sends the offer
-        dc = pc.createDataChannel('files', { ordered: true });
-        setupDataChannel(dc);
-
-        pc.createOffer()
-          .then(offer => pc.setLocalDescription(offer))
-          .then(() => wsSend({ kind: 'rtc-offer', offer: pc.localDescription }));
-    } else {
-        // Joiner waits for data channel
-        pc.ondatachannel = (e) => {
-            dc = e.channel;
-            setupDataChannel(dc);
-        };
-    }
-}
-
-function setupDataChannel(channel) {
-    channel.binaryType = 'arraybuffer';
-
-    channel.onopen = () => {
-        p2pReady = true;
-        updateConnStatus();
-        sysMsg('🚀 P2P active! Files will transfer directly without server.');
-    };
-
-    channel.onclose = () => {
-        p2pReady = false;
-        updateConnStatus();
-    };
-
-    channel.onmessage = (e) => {
-        handleFileData(e.data);
-    };
-}
-
-async function handleRTCOffer(offer) {
-    if (!pc) startWebRTC();
-    await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    wsSend({ kind: 'rtc-answer', answer: pc.localDescription });
-}
-
-async function handleRTCAnswer(answer) {
-    await pc.setRemoteDescription(new RTCSessionDescription(answer));
-}
-
-async function handleRTCIce(candidate) {
-    try {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (e) {
-        console.warn('ICE error:', e);
-    }
-}
-
-// ════════════════════════════════════════════════
-//  3. MESSAGING — always via WebSocket (instant)
-// ════════════════════════════════════════════════
-function sendMessage() {
-    const inp  = document.getElementById('msgInput');
-    const text = inp.value.trim();
-    if (!text || !wsConnected) return;
-    wsSend({ kind: 'chat', text });
-    addMsg(text, 'sent');
-    inp.value = '';
-}
-
-function onKey(e) { if (e.key === 'Enter') sendMessage(); }
-
-// ════════════════════════════════════════════════
-//  4. FILE TRANSFER — P2P if available, else WS
-// ════════════════════════════════════════════════
-function pickFile() { document.getElementById('fileInput').click(); }
-
-async function sendFile() {
-    const inp  = document.getElementById('fileInput');
-    const file = inp.files[0];
-    if (!file) return;
-    inp.value = '';
-
-    if (file.size > 200 * 1024 * 1024) { alert('Max 200 MB.'); return; }
-    if (file.size > 50 * 1024 * 1024) {
-        if (!confirm('⚠️ Files over 50 MB may crash low-RAM devices. Continue?')) return;
-    }
-
-    const via   = p2pReady ? 'p2p' : 'relay';
-    const CHUNK = p2pReady ? 64 * 1024 : 16 * 1024; // bigger chunks for P2P
-    const buf   = await file.arrayBuffer();
-    const totalChunks = Math.ceil(buf.byteLength / CHUNK);
-    const fileId = 'f' + Date.now();
-
-    const meta = {
-        type: 'file-meta',
-        id: fileId,
-        name: file.name,
-        size: file.size,
-        mime: file.type,
-        totalChunks,
-        via
-    };
-
-    appendSendProgress(file, fileId, via);
-
-    if (p2pReady) {
-        // ── Send via WebRTC DataChannel (P2P) ──
-        dc.send(JSON.stringify(meta));
-        for (let i = 0; i < totalChunks; i++) {
-            const slice = buf.slice(i * CHUNK, (i + 1) * CHUNK);
-            // Send index header + raw bytes
-            const header    = new TextEncoder().encode(JSON.stringify({ type: 'file-chunk', idx: i }) + '\n');
-            const combined  = new Uint8Array(header.length + slice.byteLength);
-            combined.set(header, 0);
-            combined.set(new Uint8Array(slice), header.length);
-            dc.send(combined.buffer);
-
-            updateProgress(fileId, Math.round(((i + 1) / totalChunks) * 100));
-            // throttle to avoid buffer overflow
-            if (dc.bufferedAmount > 1024 * 1024) await sleep(50);
-            if (i % 8 === 0) await sleep(0);
-        }
-    } else {
-        // ── Fallback: send via WebSocket relay ──
-        wsSend({ kind: 'file', ...meta });
-        for (let i = 0; i < totalChunks; i++) {
-            const slice = buf.slice(i * CHUNK, (i + 1) * CHUNK);
-            wsSend({
-                kind: 'file-chunk',
-                idx: i,
-                bytes: Array.from(new Uint8Array(slice))
-            });
-            updateProgress(fileId, Math.round(((i + 1) / totalChunks) * 100));
-            if (i % 4 === 0) await sleep(0);
-        }
-    }
-}
-
-// Handle data channel messages (binary or JSON)
-function handleFileData(data) {
-    if (typeof data === 'string') {
-        // JSON metadata
-        const msg = JSON.parse(data);
-        if (msg.type === 'file-meta') {
-            incomingMeta   = msg;
-            incomingChunks = new Array(msg.totalChunks);
-            incomingCount  = 0;
-            appendFileProgress(msg, msg.id, 'p2p');
-        }
-    } else {
-        // Binary chunk: header\nbytes
-        const arr    = new Uint8Array(data);
-        const nl     = arr.indexOf(10); // newline
-        const header = JSON.parse(new TextDecoder().decode(arr.slice(0, nl)));
-        const bytes  = arr.slice(nl + 1);
-
-        if (!incomingMeta) return;
-        incomingChunks[header.idx] = bytes;
-        incomingCount++;
-        updateProgress(incomingMeta.id,
-            Math.round((incomingCount / incomingMeta.totalChunks) * 100));
-        if (incomingCount === incomingMeta.totalChunks) assembleFile();
-    }
-}
-
-// Handle WS-relayed file (fallback)
-function handleWSFile(msg) {
-    if (msg.kind === 'file') {
-        incomingMeta   = { ...msg, type: 'file-meta' };
-        incomingChunks = new Array(msg.totalChunks);
-        incomingCount  = 0;
-        appendFileProgress(msg, msg.id, 'relay');
-    } else if (msg.kind === 'file-chunk') {
-        if (!incomingMeta) return;
-        incomingChunks[msg.idx] = new Uint8Array(msg.bytes);
-        incomingCount++;
-        updateProgress(incomingMeta.id,
-            Math.round((incomingCount / incomingMeta.totalChunks) * 100));
-        if (incomingCount === incomingMeta.totalChunks) assembleFile();
-    }
-}
-
-function assembleFile() {
-    const meta  = incomingMeta;
-    const total = incomingChunks.reduce((s, c) => s + c.length, 0);
-    const out   = new Uint8Array(total);
-    let off = 0;
-    for (const c of incomingChunks) { out.set(c, off); off += c.length; }
-    const blob = new Blob([out], { type: meta.mime });
-    const url  = URL.createObjectURL(blob);
-    const el   = document.getElementById(meta.id);
-    if (el) {
-        el.innerHTML = buildFileHTML(meta.name, meta.size, '✅ Tap to download', meta.via || 'relay');
-        el.onclick = () => triggerDownload(url, meta.name);
-    }
-    incomingMeta = null; incomingChunks = []; incomingCount = 0;
-}
-
-// ════════════════════════════════════════════════
-//  ROOM MANAGEMENT
-// ════════════════════════════════════════════════
+// ════════════════════════════════════════
+//  ROOM
+// ════════════════════════════════════════
 function createRoom() {
-    isCreator = true;
     myCode = String(Math.floor(100000 + Math.random() * 900000));
     ws.send(JSON.stringify({ type: 'create', code: myCode }));
     document.getElementById('codeDisplay').textContent = myCode;
@@ -683,33 +449,121 @@ function createRoom() {
 function toggleJoin() {
     const sec = document.getElementById('joinSection');
     sec.classList.toggle('hidden');
-    if (!sec.classList.contains('hidden')) document.getElementById('joinInput').focus();
+    if (!sec.classList.contains('hidden')) {
+        document.getElementById('joinInput').focus();
+    }
 }
 
 function joinRoom() {
     const code = document.getElementById('joinInput').value.trim();
-    if (code.length !== 6) { setJoinStatus('Enter a 6-digit code.', 'error'); return; }
+    if (code.length !== 6) {
+        setJoinStatus('Please enter a 6-digit code.', 'error');
+        return;
+    }
     setJoinStatus('Connecting…', 'loading');
     ws.send(JSON.stringify({ type: 'join', code }));
 }
 
-// ════════════════════════════════════════════════
+// ════════════════════════════════════════
+//  CHAT
+// ════════════════════════════════════════
+function sendMessage() {
+    const inp  = document.getElementById('msgInput');
+    const text = inp.value.trim();
+    if (!text || !connected) return;
+    relay({ kind: 'chat', text });
+    addMsg(text, 'sent');
+    inp.value = '';
+}
+
+function onKey(e) {
+    if (e.key === 'Enter') sendMessage();
+}
+
+// ════════════════════════════════════════
+//  FILE TRANSFER
+// ════════════════════════════════════════
+function pickFile() {
+    document.getElementById('fileInput').click();
+}
+
+async function sendFile() {
+    const inp  = document.getElementById('fileInput');
+    const file = inp.files[0];
+    if (!file || !connected) return;
+    inp.value = '';
+
+    if (file.size > 200 * 1024 * 1024) {
+        alert('Max file size is 200 MB.');
+        return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+        if (!confirm('⚠️ Files over 50 MB may crash low-RAM devices. Continue?')) return;
+    }
+
+    const CHUNK       = 16 * 1024;
+    const buf         = await file.arrayBuffer();
+    const totalChunks = Math.ceil(buf.byteLength / CHUNK);
+    const fileId      = 'f' + Date.now();
+
+    // Send metadata first
+    relay({
+        kind: 'file-meta',
+        id: fileId,
+        name: file.name,
+        size: file.size,
+        mime: file.type,
+        totalChunks
+    });
+
+    appendSendProgress(file, fileId);
+
+    // Send chunks
+    for (let i = 0; i < totalChunks; i++) {
+        const slice = buf.slice(i * CHUNK, (i + 1) * CHUNK);
+        relay({
+            kind: 'file-chunk',
+            idx: i,
+            bytes: Array.from(new Uint8Array(slice))
+        });
+        updateProgress(fileId, Math.round(((i + 1) / totalChunks) * 100));
+        if (i % 4 === 0) await sleep(0); // yield to keep UI responsive
+    }
+}
+
+function assembleFile() {
+    const meta  = incomingMeta;
+    const total = incomingChunks.reduce((s, c) => s + c.length, 0);
+    const out   = new Uint8Array(total);
+    let off = 0;
+    for (const c of incomingChunks) { out.set(c, off); off += c.length; }
+
+    const blob = new Blob([out], { type: meta.mime });
+    const url  = URL.createObjectURL(blob);
+
+    const el = document.getElementById(meta.id);
+    if (el) {
+        el.innerHTML = buildFileHTML(meta.name, meta.size, '✅ Tap to download');
+        el.onclick = () => triggerDownload(url, meta.name);
+    }
+
+    incomingMeta   = null;
+    incomingChunks = [];
+    incomingCount  = 0;
+}
+
+// ════════════════════════════════════════
 //  UI HELPERS
-// ════════════════════════════════════════════════
+// ════════════════════════════════════════
 function showChat() {
     document.getElementById('setupScreen').classList.add('hidden');
     document.getElementById('chatScreen').style.display = 'block';
 }
 
 function enableChat(on) {
-    ['msgInput','sendBtn','attachBtn'].forEach(id =>
-        document.getElementById(id).disabled = !on);
-}
-
-function updateConnStatus() {
-    const p2p = p2pReady ? '🚀 P2P direct' : '🔄 Server relay';
-    document.getElementById('connStatus').textContent =
-        `Chat: WebSocket ✅  |  Files: ${p2p}`;
+    document.getElementById('msgInput').disabled  = !on;
+    document.getElementById('sendBtn').disabled   = !on;
+    document.getElementById('attachBtn').disabled = !on;
 }
 
 function addMsg(text, side) {
@@ -726,40 +580,39 @@ function sysMsg(text) {
     appendToChat(d);
 }
 
-function appendFileProgress(meta, id, via) {
+function appendFileProgress(meta) {
     const d = document.createElement('div');
     d.className = 'msg file-msg received';
-    d.id = id;
-    d.innerHTML = buildFileHTML(meta.name, meta.size, 'Receiving…', via) +
+    d.id = meta.id;
+    d.innerHTML = buildFileHTML(meta.name, meta.size, 'Receiving…') +
         `<div class="progress-wrap dark" style="width:100%;margin-top:8px;">
-           <div class="progress-bar dark" id="bar-${id}"></div></div>`;
+           <div class="progress-bar dark" id="bar-${meta.id}"></div>
+         </div>`;
     appendToChat(d);
 }
 
-function appendSendProgress(file, id, via) {
+function appendSendProgress(file, id) {
     const d = document.createElement('div');
     d.className = 'msg file-msg sent';
     d.id = id;
-    d.innerHTML = buildFileHTML(file.name, file.size, 'Sending…', via) +
+    d.innerHTML = buildFileHTML(file.name, file.size, 'Sending…') +
         `<div class="progress-wrap" style="width:100%;margin-top:8px;">
-           <div class="progress-bar" id="bar-${id}"></div></div>`;
+           <div class="progress-bar" id="bar-${id}"></div>
+         </div>`;
     appendToChat(d);
-}
-
-function buildFileHTML(name, size, sub, via) {
-    const badge = via === 'p2p'
-        ? '<span class="transfer-badge badge-p2p">P2P</span>'
-        : '<span class="transfer-badge badge-relay">Relay</span>';
-    return `<span class="file-icon">📎</span>
-            <div>
-              <div class="file-name">${esc(name)}${badge}</div>
-              <div class="file-meta">${fmtSize(size)} · ${sub}</div>
-            </div>`;
 }
 
 function updateProgress(id, pct) {
     const b = document.getElementById('bar-' + id);
     if (b) b.style.width = pct + '%';
+}
+
+function buildFileHTML(name, size, sub) {
+    return `<span class="file-icon">📎</span>
+            <div>
+              <div class="file-name">${esc(name)}</div>
+              <div class="file-meta">${fmtSize(size)} · ${sub}</div>
+            </div>`;
 }
 
 function appendToChat(el) {
@@ -768,14 +621,9 @@ function appendToChat(el) {
     box.scrollTop = box.scrollHeight;
 }
 
-function setServerStatus(html, type) {
-    document.getElementById('serverStatus').innerHTML =
-        `<div class="pill ${type}">${html}</div>`;
-}
-
-function setJoinStatus(msg, type) {
+function setJoinStatus(text, type) {
     document.getElementById('joinStatus').innerHTML =
-        `<div class="pill ${type}">${msg}</div>`;
+        `<div class="pill ${type}">${text}</div>`;
 }
 
 function copyCode() {
@@ -787,8 +635,6 @@ function copyCode() {
 }
 
 function disconnect() {
-    if (dc) dc.close();
-    if (pc) pc.close();
     if (ws) ws.close();
     location.reload();
 }
@@ -799,9 +645,9 @@ function triggerDownload(url, name) {
 }
 
 function fmtSize(b) {
-    if (b < 1024)     return b + ' B';
-    if (b < 1048576)  return (b/1024).toFixed(1) + ' KB';
-    return (b/1048576).toFixed(1) + ' MB';
+    if (b < 1024)    return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    return (b / 1048576).toFixed(1) + ' MB';
 }
 
 function esc(s) {
@@ -810,31 +656,11 @@ function esc(s) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// ── Need to hook WS file relay into handleWSMsg ──
-const _origHandleWSMsg = handleWSMsg;
-
-// patch relay handler to also catch file kinds
-const origHandleWSMsg = handleWSMsg;
-function handleWSMsg(msg) {
-    if (msg.type === 'relay' && msg.data) {
-        const d = msg.data;
-        if (d.kind === 'file' || d.kind === 'file-chunk') {
-            handleWSFile(d);
-            return;
-        }
-    }
-    origHandleWSMsg(msg);
-}
-
-// ════════════════════════════════════════════════
+// ════════════════════════════════════════
 //  INIT
-// ════════════════════════════════════════════════
+// ════════════════════════════════════════
 window.addEventListener('load', connectWS);
-window.addEventListener('beforeunload', () => {
-    if (dc) dc.close();
-    if (pc) pc.close();
-    if (ws) ws.close();
-});
+window.addEventListener('beforeunload', () => ws && ws.close());
 </script>
 </body>
 </html>
