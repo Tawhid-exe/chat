@@ -372,10 +372,10 @@ window.addEventListener('load', () => initPeer());
 function initPeer(customId) {
     const options = {
         // Use PeerJS cloud with explicit host settings for reliability
-        host: '0.peerjs.com',
+        host: 'donkeychat-server.onrender.com', // 👈 replace with your Render URL
         port: 443,
         secure: true,
-        path: '/',
+        path: '/peerjs',
         debug: 0,
         config: {
             iceServers: [
@@ -610,4 +610,142 @@ async function sendFile() {
             bytes: Array.from(new Uint8Array(slice))
         });
 
-        updateProgress(progressId, Math.round(((i + 1) / totalChunks) * 100
+        updateProgress(progressId, Math.round(((i + 1) / totalChunks) * 100));
+
+        // Yield every 8 chunks so the UI doesn't freeze
+        if (i % 8 === 0) await sleep(0);
+    }
+}
+
+function assembleFile() {
+    const meta  = incomingFile;
+    const total = incomingChunks.reduce((s, c) => s + c.length, 0);
+    const combined = new Uint8Array(total);
+    let off = 0;
+    for (const chunk of incomingChunks) {
+        combined.set(chunk, off);
+        off += chunk.length;
+    }
+
+    const blob = new Blob([combined], { type: meta.mime });
+    const url  = URL.createObjectURL(blob);
+
+    // Replace progress with download button
+    const el = document.getElementById(meta._progressId);
+    if (el) {
+        el.innerHTML = buildFileHTML(meta.name, meta.size, '✅ Tap to download');
+        el.onclick = () => triggerDownload(url, meta.name);
+    }
+
+    incomingFile     = null;
+    incomingChunks   = [];
+    incomingReceived = 0;
+}
+
+// ─────────────────────────────────────────────
+//  UI HELPERS
+// ─────────────────────────────────────────────
+function showChat() {
+    document.getElementById('setupScreen').classList.add('hidden');
+    document.getElementById('chatScreen').style.display = 'block';
+}
+
+function enableChat(on) {
+    document.getElementById('msgInput').disabled  = !on;
+    document.getElementById('sendBtn').disabled   = !on;
+    document.getElementById('attachBtn').disabled = !on;
+}
+
+function addMsg(text, side) {
+    const d = document.createElement('div');
+    d.className = `msg ${side}`;
+    d.textContent = text;
+    appendToChat(d);
+}
+
+function sysMsg(text) {
+    const d = document.createElement('div');
+    d.className = 'msg system';
+    d.textContent = text;
+    appendToChat(d);
+}
+
+function appendFileProgress(meta, id) {
+    const d = document.createElement('div');
+    d.className = 'msg file-msg received';
+    d.id = id;
+    d.innerHTML = buildFileHTML(meta.name, meta.size, 'Receiving…') +
+        `<div class="progress-wrap dark" style="width:100%;margin-top:8px;">
+           <div class="progress-bar dark" id="bar-${id}"></div>
+         </div>`;
+    appendToChat(d);
+}
+
+function appendSendProgress(file, id) {
+    const d = document.createElement('div');
+    d.className = 'msg file-msg sent';
+    d.id = id;
+    d.innerHTML = buildFileHTML(file.name, file.size, 'Sending…') +
+        `<div class="progress-wrap" style="width:100%;margin-top:8px;">
+           <div class="progress-bar" id="bar-${id}"></div>
+         </div>`;
+    appendToChat(d);
+}
+
+function updateProgress(id, pct) {
+    const bar = document.getElementById('bar-' + id);
+    if (bar) bar.style.width = pct + '%';
+}
+
+function buildFileHTML(name, size, sub) {
+    return `<span class="file-icon">📎</span>
+            <div>
+              <div class="file-name">${esc(name)}</div>
+              <div class="file-meta">${fmtSize(size)} · ${sub}</div>
+            </div>`;
+}
+
+function appendToChat(el) {
+    const box = document.getElementById('chatMessages');
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+}
+
+function setJoinStatus(msg, type) {
+    document.getElementById('joinStatus').innerHTML =
+        `<div class="pill ${type}">${msg}</div>`;
+}
+
+function copyCode() {
+    navigator.clipboard.writeText(myCode).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.textContent = '✅ Copied!';
+        setTimeout(() => btn.textContent = '📋 Copy Code', 2000);
+    });
+}
+
+function disconnect() {
+    if (conn)  { conn.close();    conn  = null; }
+    if (peer)  { peer.destroy();  peer  = null; }
+    location.reload();
+}
+
+function triggerDownload(url, name) {
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.click();
+}
+
+function fmtSize(b) {
+    if (b < 1024)            return b + ' B';
+    if (b < 1024*1024)       return (b/1024).toFixed(1) + ' KB';
+    return (b/(1024*1024)).toFixed(1) + ' MB';
+}
+
+function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>
