@@ -3,353 +3,406 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DonkeyChat - P2P Chat & File Sharing</title>
+    <title>DonkeyChat - Secure P2P</title>
     <style>
+        :root {
+            /* Premium Dark Theme Variables */
+            --bg-color: #09090b;        /* Deepest black/gray */
+            --surface: #18181b;         /* Card background */
+            --surface-hover: #27272a;   /* Subtle hover state */
+            --border: #3f3f46;          /* Clean, subtle borders */
+            
+            --text-main: #fafafa;       /* Crisp white */
+            --text-muted: #a1a1aa;      /* Soft gray for subtext */
+            
+            --brand-red: #ef4444;       /* Punchy, modern red */
+            --brand-red-hover: #dc2626; /* Darker red for hovers */
+            --red-glow: rgba(239, 68, 68, 0.15);
+            
+            --radius-md: 12px;
+            --radius-lg: 16px;
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0a0a0a; /* Deep black background */
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-main);
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 20px;
+            line-height: 1.5;
         }
+
         .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(230, 57, 70, 0.15); /* Subtle red shadow */
-            max-width: 800px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px var(--red-glow);
+            max-width: 540px;
             width: 100%;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
+
+        /* --- HEADER --- */
         .header {
-            background: #000000; /* Solid Black */
-            border-bottom: 4px solid #e63946; /* Red accent */
-            color: white;
-            padding: 28px 30px;
+            padding: 32px 32px 24px;
             text-align: center;
+            border-bottom: 1px solid var(--border);
         }
-        .header h1 { font-size: 28px; margin-bottom: 6px; }
-        .header p  { opacity: 0.85; font-size: 13px; }
+        .header h1 { 
+            font-size: 24px; 
+            font-weight: 700; 
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .header p { 
+            color: var(--text-muted); 
+            font-size: 14px; 
+            margin-top: 8px; 
+        }
 
-        #setupScreen { padding: 30px; display: flex; flex-direction: column; gap: 20px; }
-        
-        .nick-input-wrap input {
-            width: 100%;
-            padding: 14px 18px;
-            border: 2px solid #e0e0e0;
-            border-radius: 12px;
-            font-size: 16px;
+        /* --- SCREENS --- */
+        #setupScreen { padding: 32px; display: flex; flex-direction: column; gap: 24px; }
+        #chatScreen { display: none; padding: 0; height: 600px; flex-direction: column; }
+
+        /* --- INPUTS & FORMS --- */
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .input-group label {
+            font-size: 13px;
             font-weight: 600;
-            text-align: center;
-            transition: border-color 0.2s;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
-        .nick-input-wrap input:focus { outline: none; border-color: #e63946; }
+        
+        input[type="text"] {
+            width: 100%;
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 14px 16px;
+            border-radius: var(--radius-md);
+            font-size: 15px;
+            transition: all 0.2s ease;
+        }
+        input[type="text"]:focus { 
+            outline: none; 
+            border-color: var(--brand-red); 
+            box-shadow: 0 0 0 3px var(--red-glow);
+        }
+        input[type="text"]:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
 
-        .btn-row { display: flex; gap: 14px; }
-
+        /* --- BUTTONS --- */
+        .btn-row { display: flex; gap: 12px; }
+        
         button {
-            flex: 1;
-            padding: 15px 24px;
+            padding: 14px 20px;
             border: none;
-            border-radius: 12px;
-            font-size: 16px;
+            border-radius: var(--radius-md);
+            font-size: 15px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.25s ease;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
-        button:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
         
         .btn-primary {
-            background: #e63946; /* Red */
+            background: var(--brand-red);
             color: white;
+            flex: 2;
         }
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(230, 57, 70, 0.45);
-        }
-        .btn-secondary { background: #f0f0f0; color: #333; }
-        .btn-secondary:hover:not(:disabled) { background: #e2e2e2; }
-
-        .code-box {
-            background: #f8f9fa;
-            border-radius: 14px;
-            padding: 28px;
-            text-align: center;
-            border: 1px solid #eeeeee;
-        }
-        .code-box .label { color: #888; font-size: 14px; margin-bottom: 10px; }
-        .code-digits {
-            font-family: 'Courier New', monospace;
-            font-size: 52px;
-            font-weight: 700;
-            letter-spacing: 12px;
-            color: #e63946; /* Red */
-            margin: 4px 0 16px;
-        }
-        .copy-btn {
-            display: inline-block;
-            padding: 8px 20px;
-            background: #000000; /* Black */
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            margin-bottom: 14px;
-            flex: none;
-        }
-        .copy-btn:hover { background: #333333; }
-
-        .join-form { display: flex; gap: 10px; }
-        .join-form input {
+        .btn-primary:hover:not(:disabled) { background: var(--brand-red-hover); }
+        
+        .btn-secondary {
+            background: var(--bg-color);
+            color: var(--text-main);
+            border: 1px solid var(--border);
             flex: 1;
-            padding: 14px 18px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            font-size: 22px;
+        }
+        .btn-secondary:hover:not(:disabled) { background: var(--surface-hover); border-color: #52525b; }
+
+        /* --- CODE DISPLAY --- */
+        .code-box {
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            text-align: center;
+        }
+        .code-digits {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 48px;
             font-weight: 700;
             letter-spacing: 8px;
-            text-align: center;
-            transition: border-color 0.2s;
+            color: var(--brand-red);
+            margin: 12px 0;
+            text-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
         }
-        .join-form input:focus { outline: none; border-color: #e63946; }
-        .join-form button { flex: none; min-width: 110px; }
 
-        .pill {
-            padding: 11px 16px;
-            border-radius: 10px;
-            font-size: 14px;
-            font-weight: 500;
-            text-align: center;
-        }
-        .pill.waiting { background: #f8f9fa; color: #555; border: 1px solid #ddd; }
-        .pill.ok      { background: #d4edda; color: #155724; }
-        .pill.error   { background: #fdf0f0; color: #a10f1c; }
-        .pill.loading { background: #f0f0f0; color: #333; }
+        .join-form { display: flex; gap: 8px; }
+        .join-form input { text-align: center; letter-spacing: 4px; font-weight: 600; font-size: 18px; }
 
+        /* --- INFO & STATUS PILLS --- */
         .info-box {
-            background: #fdf0f0;
-            border-left: 4px solid #e63946;
-            padding: 13px 15px;
-            border-radius: 8px;
+            background: rgba(239, 68, 68, 0.05);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            padding: 16px;
+            border-radius: var(--radius-md);
             font-size: 13px;
-            color: #a10f1c;
+            color: #fca5a5;
             line-height: 1.6;
         }
+        .info-box span { color: var(--brand-red); font-weight: bold; }
 
-        #chatScreen { display: none; padding: 30px; }
+        .status-text {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+        }
+        .status-dot.active { background: #22c55e; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); }
+        .status-dot.error { background: var(--brand-red); }
+
+        /* --- CHAT SCREEN --- */
         .chat-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding-bottom: 18px;
-            border-bottom: 2px solid #f0f0f0;
-            margin-bottom: 6px;
+            background: var(--surface);
         }
-        .chat-header h3 { color: #000000; font-size: 18px; }
-        .chat-subtext   { font-size: 12px; color: #888; margin-top: 2px; }
-
-        .btn-disconnect {
-            padding: 8px 18px;
-            background: #000000;
-            color: white;
-            border-radius: 8px;
-            font-size: 13px;
-            flex: none;
-            min-width: auto;
-        }
-        .btn-disconnect:hover { background: #333333; }
-
+        .chat-header-info h3 { font-size: 16px; font-weight: 600; }
+        .chat-header-info p { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        
         .chat-messages {
-            height: 400px;
+            flex: 1;
             overflow-y: auto;
-            padding: 16px 0;
+            padding: 24px;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 16px;
+            background: var(--bg-color);
         }
         .chat-messages::-webkit-scrollbar { width: 6px; }
-        .chat-messages::-webkit-scrollbar-thumb { background: #c0c0c0; border-radius: 10px; }
+        .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+        .msg-wrapper {
+            display: flex;
+            flex-direction: column;
+            max-width: 80%;
+        }
+        .msg-wrapper.sent { align-self: flex-end; align-items: flex-end; }
+        .msg-wrapper.received { align-self: flex-start; align-items: flex-start; }
+
+        .msg-nick {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+            padding: 0 4px;
+        }
 
         .msg {
-            max-width: 72%;
-            padding: 11px 16px;
-            border-radius: 18px;
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 14.5px;
+            line-height: 1.5;
             word-wrap: break-word;
-            font-size: 15px;
-            line-height: 1.45;
-            animation: popIn 0.2s ease;
         }
-        @keyframes popIn {
-            from { opacity: 0; transform: translateY(8px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-        .msg.sent {
-            align-self: flex-end;
-            background: #e63946; /* Red */
+        .msg-wrapper.sent .msg {
+            background: var(--brand-red);
             color: white;
             border-bottom-right-radius: 4px;
         }
-        .msg.received {
-            align-self: flex-start;
-            background: #f0f0f0; /* Light Grey */
-            color: #222;
+        .msg-wrapper.received .msg {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text-main);
             border-bottom-left-radius: 4px;
         }
+        
         .msg.system {
             align-self: center;
-            background: #f8f9fa;
-            color: #555;
+            background: transparent;
+            color: var(--text-muted);
             font-size: 12px;
+            font-weight: 500;
+            padding: 8px 16px;
+            border: 1px dashed var(--border);
+            border-radius: 20px;
             max-width: 90%;
             text-align: center;
-            padding: 7px 14px;
-            border: 1px solid #ddd;
+            margin: 8px 0;
         }
-        .msg.file-msg {
+
+        .chat-input-area {
+            padding: 20px 24px;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
             display: flex;
-            align-items: center;
             gap: 12px;
-            cursor: pointer;
-        }
-        .msg.file-msg:hover { opacity: 0.82; }
-        .file-icon { font-size: 26px; flex-shrink: 0; }
-        .file-name { font-weight: 600; font-size: 14px; }
-        .file-meta { font-size: 11px; opacity: 0.72; margin-top: 2px; }
-
-        .progress-wrap { margin-top: 6px; background: rgba(255,255,255,0.3); border-radius: 4px; height: 4px; overflow: hidden; }
-        .progress-bar  { height: 100%; background: white; width: 0%; transition: width 0.15s; border-radius: 4px; }
-        .progress-wrap.dark { background: #e0e0e0; }
-        .progress-bar.dark  { background: #e63946; }
-
-        .input-row {
-            display: flex;
-            gap: 10px;
-            padding-top: 16px;
-            border-top: 2px solid #f0f0f0;
             align-items: center;
         }
-        .input-row input {
+        .chat-input-area input {
             flex: 1;
-            padding: 12px 18px;
-            border: 2px solid #e0e0e0;
-            border-radius: 25px;
-            font-size: 15px;
-            transition: border-color 0.2s;
-        }
-        .input-row input:focus { outline: none; border-color: #e63946; }
-        .input-row input:disabled { background: #f7f7f7; }
-        
-        .btn-send {
-            padding: 12px 22px;
-            background: #e63946; /* Red */
+            padding: 14px 16px;
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            border-radius: 24px;
             color: white;
-            border-radius: 25px;
-            font-weight: 600;
-            flex: none;
-            min-width: auto;
+            font-size: 14px;
         }
-        .btn-attach {
-            padding: 12px 16px;
-            background: #f0f0f0;
-            border-radius: 25px;
-            font-size: 18px;
-            flex: none;
-            min-width: auto;
+        .chat-input-area input:focus { outline: none; border-color: var(--brand-red); }
+        
+        .btn-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: 0.2s;
         }
-        .btn-attach:disabled, .btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
-        .hidden { display: none !important; }
+        .btn-icon:hover:not(:disabled) { background: var(--surface-hover); color: var(--brand-red); }
+        .btn-send {
+            background: var(--brand-red);
+            border: none;
+            color: white;
+        }
+        .btn-send:hover:not(:disabled) { background: var(--brand-red-hover); color: white; }
 
-        @media (max-width: 520px) {
-            .btn-row { flex-direction: column; }
-            .code-digits { font-size: 38px; letter-spacing: 8px; }
-            .msg { max-width: 88%; }
-        }
+        /* File UI styling */
+        .file-msg { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+        .file-icon { font-size: 24px; }
+        .file-name { font-weight: 600; font-size: 14px; }
+        .file-meta { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+        .progress-wrap { margin-top: 8px; height: 4px; background: rgba(0,0,0,0.2); border-radius: 4px; overflow: hidden; }
+        .progress-bar { height: 100%; width: 0%; transition: width 0.2s; }
+        .msg-wrapper.sent .progress-bar { background: white; }
+        .msg-wrapper.received .progress-bar { background: var(--brand-red); }
+        .msg-wrapper.received .progress-wrap { background: var(--bg-color); }
+
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
+
 <div class="container">
     <div class="header">
         <h1>🫏 DonkeyChat</h1>
-        <p>Instant Chat & File Sharing — Any browser, any network, anywhere</p>
+        <p>Encrypted P2P network. Zero traces.</p>
     </div>
 
     <div id="setupScreen">
-        <div id="serverStatus">
-            <div class="pill loading">⏳ Connecting to server…</div>
+        <div class="status-text" id="serverStatus">
+            <div class="status-dot"></div> Connecting to relay server...
         </div>
         
-        <div class="nick-input-wrap">
-            <input type="text" id="nickInput" placeholder="Enter your nickname..." maxlength="15">
+        <div class="input-group">
+            <label>Agent Alias (Nickname)</label>
+            <input type="text" id="nickInput" placeholder="Enter your display name..." maxlength="20">
         </div>
 
         <div class="btn-row">
-            <button class="btn-primary" id="createBtn" onclick="createRoom()" disabled>Create Room</button>
+            <button class="btn-primary" id="createBtn" onclick="createRoom()" disabled>Create Secure Room</button>
             <button class="btn-secondary" id="joinBtn" onclick="toggleJoin()" disabled>Join Room</button>
         </div>
 
         <div id="codeBox" class="code-box hidden">
-            <div class="label">Share this code with your peer</div>
+            <div class="status-text"><div class="status-dot active"></div> Room Active. Share code with peer.</div>
             <div class="code-digits" id="codeDisplay">------</div>
-            <button class="copy-btn" onclick="copyCode()">📋 Copy Code</button>
-            <div class="pill waiting">Waiting for peer to connect…</div>
+            <button class="btn-secondary" style="width: 100%;" onclick="copyCode()">📋 Copy Passcode</button>
         </div>
 
         <div id="joinSection" class="hidden">
-            <div class="join-form">
-                <input type="text" id="joinInput" placeholder="123456" maxlength="6"
-                       inputmode="numeric" oninput="this.value=this.value.replace(/\D/g,'')">
-                <button class="btn-primary" onclick="joinRoom()">Connect</button>
+            <div class="input-group">
+                <label>Enter Room Passcode</label>
+                <div class="join-form">
+                    <input type="text" id="joinInput" placeholder="000000" maxlength="6" inputmode="numeric" oninput="this.value=this.value.replace(/\D/g,'')">
+                    <button class="btn-primary" style="flex: 0 0 auto;" onclick="joinRoom()">Connect</button>
+                </div>
             </div>
-            <div id="joinStatus" style="margin-top:12px;"></div>
+            <div id="joinStatus" style="margin-top: 12px;"></div>
         </div>
 
         <div class="info-box">
-            💡 <strong>How it works:</strong> Set a nickname, then share your 6-digit code. Chat and files are sent securely through your relay server.<br><br>
-            ⚠️ <strong>File limit:</strong> 200 MB max. Files over 50 MB may crash low-RAM devices.
+            <span>Security Note:</span> Chat and files are routed securely through a relay. Maximum file size is 200MB. Files above 50MB may affect browser memory on older mobile devices.
         </div>
     </div>
 
     <div id="chatScreen">
         <div class="chat-header">
-            <div>
-                <h3>💬 DonkeyChat</h3>
-                <div class="chat-subtext" id="chatSubtext">🟢 Connected · Secure relay</div>
+            <div class="chat-header-info">
+                <h3>Secure Session</h3>
+                <p id="chatSubtext">🟢 Connected to Peer</p>
             </div>
-            <button class="btn-disconnect" onclick="disconnect()">Disconnect</button>
+            <button class="btn-secondary" style="padding: 8px 12px; font-size: 13px; flex: none;" onclick="disconnect()">End Session</button>
         </div>
-        <div class="chat-messages" id="chatMessages"></div>
-        <div class="input-row">
-            <button class="btn-attach" id="attachBtn" onclick="pickFile()" disabled>📎</button>
-            <input type="text" id="msgInput" placeholder="Type a message…" onkeydown="onKey(event)" disabled>
-            <button class="btn-send" id="sendBtn" onclick="sendMessage()" disabled>Send</button>
+        
+        <div class="chat-messages" id="chatMessages">
+            </div>
+        
+        <div class="chat-input-area">
+            <button class="btn-icon" id="attachBtn" onclick="pickFile()" disabled title="Send File">📎</button>
+            <input type="text" id="msgInput" placeholder="Type a secure message..." onkeydown="onKey(event)" disabled>
+            <button class="btn-icon btn-send" id="sendBtn" onclick="sendMessage()" disabled title="Send Message">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
         </div>
-        <input type="file" id="fileInput" class="hidden" onchange="sendFile()"
-               accept="image/*,.zip,.pdf,.doc,.docx,.txt,.mp4,.mov">
+        <input type="file" id="fileInput" class="hidden" onchange="sendFile()">
     </div>
 </div>
 
 <script>
 // ════════════════════════════════════════
-//  CONFIG 
+//  CONFIG & STATE
 // ════════════════════════════════════════
 const WS_URL = 'wss://chat-st99.onrender.com';
-
-// ════════════════════════════════════════
-//  STATE
-// ════════════════════════════════════════
-let ws        = null;
-let myCode    = '';
+let ws = null;
+let myCode = '';
 let connected = false;
-let myNick    = '';
-let peerNick  = 'Peer';
+let myNick = '';
+let peerNick = 'Peer';
 
-let incomingMeta   = null;
+let incomingMeta = null;
 let incomingChunks = [];
-let incomingCount  = 0;
+let incomingCount = 0;
 
 // ════════════════════════════════════════
 //  WEBSOCKET
@@ -358,10 +411,10 @@ function connectWS() {
     ws = new WebSocket(WS_URL);
 
     ws.onopen = () => {
-        document.getElementById('serverStatus').innerHTML = '<div class="pill ok">✅ Ready</div>';
-        setTimeout(() => { document.getElementById('serverStatus').innerHTML = ''; }, 2000);
+        const stat = document.getElementById('serverStatus');
+        stat.innerHTML = '<div class="status-dot active"></div> Relay Server Online';
         document.getElementById('createBtn').disabled = false;
-        document.getElementById('joinBtn').disabled   = false;
+        document.getElementById('joinBtn').disabled = false;
     };
 
     ws.onmessage = (e) => {
@@ -371,76 +424,56 @@ function connectWS() {
     };
 
     ws.onclose = () => {
-        if (connected) sysMsg('⚠️ Connection lost. Please refresh.');
-        else document.getElementById('serverStatus').innerHTML = '<div class="pill error">⚠️ Cannot reach server. Refresh.</div>';
+        if (connected) sysMsg('Connection to relay lost.');
+        else document.getElementById('serverStatus').innerHTML = '<div class="status-dot error"></div> Server Unreachable';
     };
 }
 
-// ════════════════════════════════════════
-//  MESSAGE HANDLER
-// ════════════════════════════════════════
 function onServerMsg(msg) {
     switch (msg.type) {
-        case 'created':
-            break;
-
         case 'peer_joined':
             connected = true;
-            // Send our nickname to the peer immediately
             relay({ kind: 'nick_exchange', nick: myNick });
             showChat();
             enableChat(true);
             break;
-
         case 'relay':
             onRelayData(msg.data);
             break;
-
         case 'peer_left':
             connected = false;
             enableChat(false);
-            sysMsg('⚠️ Peer disconnected.');
-            document.getElementById('chatSubtext').innerHTML = '🔴 Disconnected';
+            sysMsg('Peer disconnected.');
+            document.getElementById('chatSubtext').innerHTML = '🔴 Session Terminated';
             break;
-
         case 'error':
             setJoinStatus(msg.msg || 'Unknown error', 'error');
             break;
     }
 }
 
-// ════════════════════════════════════════
-//  RELAY DATA HANDLER
-// ════════════════════════════════════════
 function onRelayData(data) {
     if (!data) return;
-
     switch (data.kind) {
         case 'nick_exchange':
             peerNick = data.nick || 'Unknown';
             document.getElementById('chatSubtext').innerHTML = `🟢 Connected to <strong>${esc(peerNick)}</strong>`;
-            sysMsg(`🔒 ${esc(peerNick)} joined the chat.`);
+            sysMsg(`Session secured. ${esc(peerNick)} has joined.`);
             break;
-
         case 'chat':
             addMsg(data.text, 'received', peerNick);
             break;
-
         case 'file-meta':
-            incomingMeta   = data;
+            incomingMeta = data;
             incomingChunks = new Array(data.totalChunks);
-            incomingCount  = 0;
+            incomingCount = 0;
             appendFileProgress(data, peerNick);
             break;
-
         case 'file-chunk':
             if (!incomingMeta) return;
             incomingChunks[data.idx] = new Uint8Array(data.bytes);
             incomingCount++;
-            updateProgress(
-                incomingMeta.id,
-                Math.round((incomingCount / incomingMeta.totalChunks) * 100)
-            );
+            updateProgress(incomingMeta.id, Math.round((incomingCount / incomingMeta.totalChunks) * 100));
             if (incomingCount === incomingMeta.totalChunks) assembleFile();
             break;
     }
@@ -458,8 +491,11 @@ function relay(data) {
 function getNickname() {
     const nick = document.getElementById('nickInput').value.trim();
     if (!nick) {
-        alert("Please enter a nickname first!");
         document.getElementById('nickInput').focus();
+        // Give the input a quick red flash to indicate error
+        const inp = document.getElementById('nickInput');
+        inp.style.borderColor = 'var(--brand-red)';
+        setTimeout(() => inp.style.borderColor = 'var(--border)', 1000);
         return null;
     }
     return nick;
@@ -474,16 +510,14 @@ function createRoom() {
     document.getElementById('codeDisplay').textContent = myCode;
     document.getElementById('codeBox').classList.remove('hidden');
     document.getElementById('createBtn').disabled = true;
-    document.getElementById('joinBtn').disabled   = true;
+    document.getElementById('joinBtn').disabled = true;
     document.getElementById('nickInput').disabled = true;
 }
 
 function toggleJoin() {
     const sec = document.getElementById('joinSection');
     sec.classList.toggle('hidden');
-    if (!sec.classList.contains('hidden')) {
-        document.getElementById('joinInput').focus();
-    }
+    if (!sec.classList.contains('hidden')) document.getElementById('joinInput').focus();
 }
 
 function joinRoom() {
@@ -492,19 +526,36 @@ function joinRoom() {
 
     const code = document.getElementById('joinInput').value.trim();
     if (code.length !== 6) {
-        setJoinStatus('Please enter a 6-digit code.', 'error');
+        setJoinStatus('Passcode must be 6 digits.', 'error');
         return;
     }
     document.getElementById('nickInput').disabled = true;
-    setJoinStatus('Connecting…', 'loading');
+    setJoinStatus('Connecting...', 'loading');
     ws.send(JSON.stringify({ type: 'join', code }));
+}
+
+function setJoinStatus(text, type) {
+    const el = document.getElementById('joinStatus');
+    el.innerHTML = `<div class="status-text" style="color: ${type==='error'?'var(--brand-red)':'var(--text-main)'}">
+        <div class="status-dot ${type==='error'?'error':'active'}"></div> ${text}</div>`;
 }
 
 // ════════════════════════════════════════
 //  CHAT & UI
 // ════════════════════════════════════════
+function showChat() {
+    document.getElementById('setupScreen').classList.add('hidden');
+    document.getElementById('chatScreen').style.display = 'flex';
+}
+
+function enableChat(on) {
+    document.getElementById('msgInput').disabled = !on;
+    document.getElementById('sendBtn').disabled = !on;
+    document.getElementById('attachBtn').disabled = !on;
+}
+
 function sendMessage() {
-    const inp  = document.getElementById('msgInput');
+    const inp = document.getElementById('msgInput');
     const text = inp.value.trim();
     if (!text || !connected) return;
     relay({ kind: 'chat', text });
@@ -514,30 +565,19 @@ function sendMessage() {
 
 function onKey(e) { if (e.key === 'Enter') sendMessage(); }
 
-function showChat() {
-    document.getElementById('setupScreen').classList.add('hidden');
-    document.getElementById('chatScreen').style.display = 'block';
-}
-
-function enableChat(on) {
-    document.getElementById('msgInput').disabled  = !on;
-    document.getElementById('sendBtn').disabled   = !on;
-    document.getElementById('attachBtn').disabled = !on;
-}
-
 function addMsg(text, side, senderName) {
-    const d = document.createElement('div');
-    d.className = `msg ${side}`;
+    const wrap = document.createElement('div');
+    wrap.className = `msg-wrapper ${side}`;
     
     let html = '';
-    // Add nickname above the message text
+    // Show nickname above the bubble
     if (senderName) {
-        html += `<div style="font-size: 11px; font-weight: 700; margin-bottom: 4px; opacity: 0.85;">${esc(senderName)}</div>`;
+        html += `<div class="msg-nick">${esc(senderName)}</div>`;
     }
-    html += `<div>${esc(text)}</div>`;
+    html += `<div class="msg">${esc(text)}</div>`;
     
-    d.innerHTML = html;
-    appendToChat(d);
+    wrap.innerHTML = html;
+    appendToChat(wrap);
 }
 
 function sysMsg(text) {
@@ -554,26 +594,32 @@ function appendToChat(el) {
 }
 
 // ════════════════════════════════════════
-//  FILE TRANSFER (Kept exact same from original)
+//  FILE TRANSFER
 // ════════════════════════════════════════
 function pickFile() { document.getElementById('fileInput').click(); }
 
 async function sendFile() {
-    const inp  = document.getElementById('fileInput');
+    const inp = document.getElementById('fileInput');
     const file = inp.files[0];
     if (!file || !connected) return;
     inp.value = '';
 
     if (file.size > 200 * 1024 * 1024) return alert('Max file size is 200 MB.');
-    if (file.size > 50 * 1024 * 1024 && !confirm('⚠️ Files over 50 MB may crash low-RAM devices. Continue?')) return;
+    if (file.size > 50 * 1024 * 1024 && !confirm('Files over 50 MB may slow down your browser. Continue?')) return;
 
-    const CHUNK       = 16 * 1024;
-    const buf         = await file.arrayBuffer();
+    const CHUNK = 16 * 1024;
+    const buf = await file.arrayBuffer();
     const totalChunks = Math.ceil(buf.byteLength / CHUNK);
-    const fileId      = 'f' + Date.now();
+    const fileId = 'f' + Date.now();
 
     relay({ kind: 'file-meta', id: fileId, name: file.name, size: file.size, mime: file.type, totalChunks });
-    appendSendProgress(file, fileId, myNick);
+    
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-wrapper sent';
+    wrap.id = fileId;
+    wrap.innerHTML = `<div class="msg-nick">${esc(myNick)}</div><div class="msg file-msg">` + buildFileHTML(file.name, file.size, 'Sending...') +
+        `<div class="progress-wrap"><div class="progress-bar" id="bar-${fileId}"></div></div></div>`;
+    appendToChat(wrap);
 
     for (let i = 0; i < totalChunks; i++) {
         const slice = buf.slice(i * CHUNK, (i + 1) * CHUNK);
@@ -584,56 +630,39 @@ async function sendFile() {
 }
 
 function assembleFile() {
-    const meta  = incomingMeta;
+    const meta = incomingMeta;
     const total = incomingChunks.reduce((s, c) => s + c.length, 0);
-    const out   = new Uint8Array(total);
+    const out = new Uint8Array(total);
     let off = 0;
     for (const c of incomingChunks) { out.set(c, off); off += c.length; }
 
     const blob = new Blob([out], { type: meta.mime });
-    const url  = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
 
-    const el = document.getElementById(meta.id);
-    if (el) {
-        el.innerHTML = buildFileHTML(meta.name, meta.size, '✅ Tap to download', peerNick);
-        el.onclick = () => triggerDownload(url, meta.name);
+    const wrap = document.getElementById(meta.id);
+    if (wrap) {
+        const msgDiv = wrap.querySelector('.msg');
+        msgDiv.innerHTML = buildFileHTML(meta.name, meta.size, 'Tap to Download');
+        msgDiv.onclick = () => triggerDownload(url, meta.name);
     }
     incomingMeta = null; incomingChunks = []; incomingCount = 0;
 }
 
 function appendFileProgress(meta, senderName) {
-    const d = document.createElement('div');
-    d.className = 'msg file-msg received';
-    d.id = meta.id;
-    d.innerHTML = buildFileHTML(meta.name, meta.size, 'Receiving…', senderName) +
-        `<div class="progress-wrap dark" style="width:100%;margin-top:8px;">
-           <div class="progress-bar dark" id="bar-${meta.id}"></div>
-         </div>`;
-    appendToChat(d);
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-wrapper received';
+    wrap.id = meta.id;
+    wrap.innerHTML = `<div class="msg-nick">${esc(senderName)}</div><div class="msg file-msg">` + buildFileHTML(meta.name, meta.size, 'Receiving...') +
+        `<div class="progress-wrap"><div class="progress-bar" id="bar-${meta.id}"></div></div></div>`;
+    appendToChat(wrap);
 }
 
-function appendSendProgress(file, id, senderName) {
-    const d = document.createElement('div');
-    d.className = 'msg file-msg sent';
-    d.id = id;
-    d.innerHTML = buildFileHTML(file.name, file.size, 'Sending…', senderName) +
-        `<div class="progress-wrap" style="width:100%;margin-top:8px;">
-           <div class="progress-bar" id="bar-${id}"></div>
-         </div>`;
-    appendToChat(d);
-}
-
-function buildFileHTML(name, size, sub, senderName) {
-    let html = '';
-    if (senderName) html += `<div style="font-size: 11px; font-weight: 700; margin-bottom: 4px; opacity: 0.85; width: 100%;">${esc(senderName)}</div>`;
-    html += `<div style="display: flex; align-items: center; gap: 12px;">
-                <span class="file-icon">📎</span>
-                <div>
-                  <div class="file-name">${esc(name)}</div>
-                  <div class="file-meta">${fmtSize(size)} · ${sub}</div>
-                </div>
-             </div>`;
-    return html;
+function buildFileHTML(name, size, sub) {
+    return `<div class="file-icon">📄</div>
+            <div>
+              <div class="file-name">${esc(name)}</div>
+              <div class="file-meta">${fmtSize(size)} • ${sub}</div>
+            </div>`;
 }
 
 function updateProgress(id, pct) {
@@ -644,18 +673,15 @@ function updateProgress(id, pct) {
 // ════════════════════════════════════════
 //  HELPERS
 // ════════════════════════════════════════
-function setJoinStatus(text, type) { document.getElementById('joinStatus').innerHTML = `<div class="pill ${type}">${text}</div>`; }
 function copyCode() {
     navigator.clipboard.writeText(myCode).then(() => {
-        const btn = document.querySelector('.copy-btn');
-        btn.textContent = '✅ Copied!';
-        setTimeout(() => btn.textContent = '📋 Copy Code', 2000);
+        sysMsg('Passcode copied to clipboard.');
     });
 }
 function disconnect() { if (ws) ws.close(); location.reload(); }
 function triggerDownload(url, name) { const a = document.createElement('a'); a.href = url; a.download = name; a.click(); }
 function fmtSize(b) {
-    if (b < 1024)    return b + ' B';
+    if (b < 1024) return b + ' B';
     if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
     return (b / 1048576).toFixed(1) + ' MB';
 }
