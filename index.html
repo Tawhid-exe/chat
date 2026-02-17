@@ -425,7 +425,7 @@ function connectWS() {
 
     ws.onclose = () => {
         if (connected) sysMsg('Connection to relay lost.');
-        else document.getElementById('serverStatus').innerHTML = '<div class="status-dot error"></div> Server Unreachable';
+        else document.getElementById('serverStatus').innerHTML = '<div class="status-dot error"></div> Server Unreachable (Try Reloading)';
     };
 }
 
