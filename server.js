@@ -13,8 +13,22 @@ app.use((req, res, next) => {
 
 app.get('/', (req, res) => res.send('DonkeyChat relay server running 🫏'));
 
-// rooms[code] = [ws1, ws2]
+// rooms[code] = { peers: [ws1, ws2], createdAt: timestamp }
 const rooms = {};
+
+// FEATURE: 10-Minute Code Expiry Sweeper
+setInterval(() => {
+    const now = Date.now();
+    for (const code in rooms) {
+        if (now - rooms[code].createdAt > 10 * 60 * 1000) {
+            console.log(`Room ${code} expired after 10 minutes.`);
+            rooms[code].peers.forEach(ws => {
+                if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'error', msg: 'Session expired (10 min limit). Please create a new room.' }));
+            });
+            delete rooms[code];
+        }
+    }
+}, 60000); // Check every 60 seconds
 
 wss.on('connection', (ws) => {
     let myCode = null;
@@ -24,32 +38,36 @@ wss.on('connection', (ws) => {
         try { msg = JSON.parse(raw); } catch { return; }
 
         if (msg.type === 'create') {
+            // Prevent duplicate codes
+            if (rooms[msg.code]) {
+                ws.send(JSON.stringify({ type: 'error', msg: 'collision' }));
+                return;
+            }
             myCode = msg.code;
-            rooms[myCode] = [ws];
+            rooms[myCode] = { peers: [ws], createdAt: Date.now() };
             ws.send(JSON.stringify({ type: 'created', code: myCode }));
             console.log('Room created:', myCode);
         }
 
         else if (msg.type === 'join') {
             const room = rooms[msg.code];
-            if (!room || room.length >= 2) {
-                ws.send(JSON.stringify({ type: 'error', msg: 'Room not found or full' }));
+            if (!room || room.peers.length >= 2) {
+                ws.send(JSON.stringify({ type: 'error', msg: 'Passcode invalid or room full.' }));
                 return;
             }
             myCode = msg.code;
-            room.push(ws);
+            room.peers.push(ws);
 
-            // Tell both peers they're connected
-            room[0].send(JSON.stringify({ type: 'peer_joined' }));
-            room[1].send(JSON.stringify({ type: 'peer_joined' }));
+            // Tell both peers they're connected - Assign one as 'initiator' for WebRTC
+            room.peers[0].send(JSON.stringify({ type: 'peer_joined', initiator: true }));
+            room.peers[1].send(JSON.stringify({ type: 'peer_joined', initiator: false }));
             console.log('Room joined:', myCode);
         }
 
         else if (msg.type === 'relay') {
-            // Forward anything to the other peer (chat msgs + WebRTC signaling)
             const room = rooms[myCode];
             if (!room) return;
-            const other = room.find(p => p !== ws);
+            const other = room.peers.find(p => p !== ws);
             if (other && other.readyState === 1) {
                 other.send(JSON.stringify({ type: 'relay', data: msg.data }));
             }
@@ -59,7 +77,7 @@ wss.on('connection', (ws) => {
     ws.on('close', () => {
         if (myCode && rooms[myCode]) {
             const room = rooms[myCode];
-            const other = room.find(p => p !== ws);
+            const other = room.peers.find(p => p !== ws);
             if (other && other.readyState === 1) {
                 other.send(JSON.stringify({ type: 'peer_left' }));
             }
