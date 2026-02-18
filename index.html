@@ -506,31 +506,79 @@
         /* File UI */
         .file-msg {
             display: flex;
-            align-items: center;
-            gap: 10px;
-            cursor: pointer;
+            align-items: flex-start;
+            gap: 12px;
         }
 
         .file-icon {
-            font-size: 22px;
+            font-size: 26px;
             flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .file-info {
+            flex: 1;
+            min-width: 0;
         }
 
         .file-name {
             font-weight: 600;
             font-size: 13px;
             word-break: break-all;
+            line-height: 1.3;
         }
 
         .file-meta {
             font-size: 11px;
-            opacity: 0.8;
-            margin-top: 2px;
+            opacity: 0.75;
+            margin-top: 3px;
         }
 
+        /* Accept / Decline buttons */
+        .file-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .btn-accept {
+            flex: 1;
+            padding: 8px 0;
+            background: var(--green);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn-accept:hover {
+            opacity: 0.85;
+        }
+
+        .btn-decline {
+            flex: 1;
+            padding: 8px 0;
+            background: transparent;
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-decline:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        /* Progress */
         .progress-wrap {
-            margin-top: 8px;
-            height: 3px;
+            margin-top: 10px;
+            height: 4px;
             background: rgba(0, 0, 0, 0.2);
             border-radius: 4px;
             overflow: hidden;
@@ -539,26 +587,34 @@
         .progress-bar {
             height: 100%;
             width: 0%;
-            transition: width 0.15s;
+            transition: width 0.12s linear;
         }
 
         .msg-wrapper.sent .progress-bar {
-            background: rgba(255, 255, 255, 0.7);
+            background: rgba(255, 255, 255, 0.75);
         }
 
         .msg-wrapper.received .progress-bar {
-            background: var(--brand-red);
+            background: var(--green);
         }
 
         .msg-wrapper.received .progress-wrap {
-            background: var(--bg-color);
+            background: rgba(0, 0, 0, 0.15);
+        }
+
+        .progress-stats {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+            font-size: 10px;
+            opacity: 0.7;
         }
 
         /* Transfer mode label */
         .transfer-mode {
             font-size: 10px;
-            opacity: 0.7;
-            margin-top: 3px;
+            opacity: 0.65;
+            margin-top: 4px;
         }
 
         .hidden {
@@ -639,10 +695,8 @@
                 <input type="text" id="msgInput" placeholder="Type a secure message..." onkeydown="onKey(event)"
                     disabled>
                 <button class="btn-icon btn-send" id="sendBtn" onclick="sendMessage()" disabled title="Send">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="22" y1="2" x2="11" y2="13"></line>
-                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
                     </svg>
                 </button>
             </div>
@@ -726,6 +780,12 @@
         let incomingMeta = null;
         let incomingChunks = [];
         let incomingCount = 0;
+        // Pending outgoing transfers waiting for receiver acceptance
+        // fileId → { buf, meta, useRTC }
+        let pendingOutgoing = {};
+        // Speed tracking per transfer
+        // fileId → { startTime, bytesTransferred }
+        let transferStats = {};
 
         // Read receipts: msgId → DOM element
         let sentMsgMap = {};
@@ -793,20 +853,17 @@
                     peerNick = data.nick || 'Peer';
                     document.getElementById('chatSubtext').innerHTML =
                         `🟢 Connected to <strong>${esc(peerNick)}</strong>`;
-                    // Only show chat + system message once (first nick_exchange)
                     if (!chatVisible) {
                         chatVisible = true;
                         showChat();
                         enableChat(true);
                         sysMsg(`Session secured. ${esc(peerNick)} has joined.`);
                     } else {
-                        // Update peer name if they reconnect
                         sysMsg(`${esc(peerNick)} is in the session.`);
                     }
                     break;
                 case 'chat':
                     addMsg(data.text, 'received', peerNick, data.msgId);
-                    // Send read receipt back
                     relay({ kind: 'read_receipt', msgId: data.msgId });
                     break;
                 case 'read_receipt':
@@ -814,17 +871,25 @@
                     break;
 
                 // ── WebRTC Signaling ──
-                case 'rtc_offer':
-                    handleOffer(data.sdp);
+                case 'rtc_offer': handleOffer(data.sdp); break;
+                case 'rtc_answer': handleAnswer(data.sdp); break;
+                case 'rtc_ice': handleIce(data.candidate); break;
+
+                // ── File handshake ──
+                case 'file-request':
+                    // Receiver sees accept/decline dialog
+                    showFileRequest(data);
                     break;
-                case 'rtc_answer':
-                    handleAnswer(data.sdp);
+                case 'file-accepted':
+                    // Sender can now start sending
+                    startActualTransfer(data.fileId);
                     break;
-                case 'rtc_ice':
-                    handleIce(data.candidate);
+                case 'file-declined':
+                    // Sender notified of decline
+                    onFileDeclined(data.fileId);
                     break;
 
-                // ── File transfer (WS fallback only) ──
+                // ── File chunks (WS relay fallback) ──
                 case 'file-meta':
                     incomingMeta = data;
                     incomingChunks = new Array(data.totalChunks);
@@ -835,7 +900,7 @@
                     if (!incomingMeta) return;
                     incomingChunks[data.idx] = new Uint8Array(data.bytes);
                     incomingCount++;
-                    updateProgress(incomingMeta.id, Math.round((incomingCount / incomingMeta.totalChunks) * 100));
+                    updateSpeedAndProgress(incomingMeta.id, incomingCount, incomingMeta.totalChunks, incomingMeta.size);
                     if (incomingCount === incomingMeta.totalChunks) assembleFile();
                     break;
             }
@@ -956,22 +1021,21 @@
         // ════════════════════════════════════════════════════════════
         function onDataChannelMsg(data) {
             if (typeof data === 'string') {
-                // JSON control message
                 let msg;
                 try { msg = JSON.parse(data); } catch { return; }
-
                 if (msg.kind === 'file-meta') {
                     incomingMeta = msg;
                     incomingChunks = new Array(msg.totalChunks);
                     incomingCount = 0;
+                    transferStats[msg.id] = { startTime: Date.now(), bytesTransferred: 0 };
                     appendFileProgress(msg, peerNick, 'p2p');
                 }
             } else {
-                // Binary chunk
+                // Binary chunk via DataChannel
                 if (!incomingMeta) return;
                 incomingChunks[incomingCount] = new Uint8Array(data);
                 incomingCount++;
-                updateProgress(incomingMeta.id, Math.round((incomingCount / incomingMeta.totalChunks) * 100));
+                updateSpeedAndProgress(incomingMeta.id, incomingCount, incomingMeta.totalChunks, incomingMeta.size);
                 if (incomingCount === incomingMeta.totalChunks) assembleFile();
             }
         }
@@ -1152,56 +1216,142 @@
             if (!file || !connected) return;
             inp.value = '';
 
-            const CHUNK = 16 * 1024; // 16KB chunks — safe for all browsers
+            const CHUNK = 16 * 1024;
             const buf = await file.arrayBuffer();
             const totalChunks = Math.ceil(buf.byteLength / CHUNK);
             const fileId = 'f' + Date.now();
-
-            // Check if WebRTC DataChannel is available and open
             const useRTC = usingRTC && dataChannel && dataChannel.readyState === 'open';
-            const transferMode = useRTC ? 'p2p' : 'relay';
 
-            if (!useRTC && file.size > 200 * 1024 * 1024) {
-                alert('Relay fallback: Max file size is 200 MB. WebRTC P2P supports larger files.');
-                return;
-            }
-            if (!useRTC && file.size > 50 * 1024 * 1024 && !confirm('Files over 50 MB may slow down your browser via relay. Continue?')) return;
+            // Store pending transfer — actual send starts after receiver accepts
+            pendingOutgoing[fileId] = { buf, totalChunks, file, useRTC };
 
-            const meta = { kind: 'file-meta', id: fileId, name: file.name, size: file.size, mime: file.type, totalChunks };
+            // Send file-request (metadata only, no data yet)
+            const req = { kind: 'file-request', fileId, name: file.name, size: file.size, mime: file.type, totalChunks, useRTC };
+            relay(req);
 
-            // Show outgoing file bubble
+            // Show sender's "waiting" bubble
             const wrap = document.createElement('div');
             wrap.className = 'msg-wrapper sent';
             wrap.id = fileId;
-            wrap.innerHTML = `<div class="msg-nick">${esc(myNick)}</div>
-        <div class="msg file-msg">${buildFileHTML(file.name, file.size, 'Sending...')}
-            <div class="progress-wrap"><div class="progress-bar" id="bar-${fileId}"></div></div>
-            <div class="transfer-mode">${useRTC ? '🔒 P2P Direct' : '🔁 Via Relay'}</div>
-        </div>`;
+            wrap.innerHTML = `
+                <div class="msg-nick">${esc(myNick)}</div>
+                <div class="msg file-msg">
+                    <div class="file-icon">📄</div>
+                    <div class="file-info">
+                        <div class="file-name">${esc(file.name)}</div>
+                        <div class="file-meta" id="meta-${fileId}">${fmtSize(file.size)} · ⏳ Waiting for acceptance...</div>
+                        <div class="transfer-mode">${useRTC ? '🔒 P2P Direct' : '🔁 Via Relay'}</div>
+                    </div>
+                </div>`;
             appendToChat(wrap);
+        }
 
-            if (useRTC) {
-                // Send via WebRTC DataChannel
-                dataChannel.send(JSON.stringify(meta));
+        // Called when receiver accepts — now actually send the data
+        async function startActualTransfer(fileId) {
+            const pending = pendingOutgoing[fileId];
+            if (!pending) return;
+            const { buf, totalChunks, file, useRTC } = pending;
+            const CHUNK = 16 * 1024;
+
+            // Update sender bubble to show progress
+            const metaEl = document.getElementById('meta-' + fileId);
+            if (metaEl) metaEl.textContent = `${fmtSize(file.size)} · Sending...`;
+
+            // Add progress bar to sender bubble
+            const msgDiv = document.querySelector(`#${fileId} .msg`);
+            if (msgDiv) {
+                msgDiv.insertAdjacentHTML('beforeend',
+                    `<div class="progress-wrap"><div class="progress-bar" id="bar-${fileId}"></div></div>
+                     <div class="progress-stats"><span id="pct-${fileId}">0%</span><span id="spd-${fileId}"></span></div>`);
+            }
+
+            transferStats[fileId] = { startTime: Date.now(), bytesTransferred: 0 };
+
+            if (useRTC && dataChannel && dataChannel.readyState === 'open') {
+                // Send file-meta control message via DataChannel
+                dataChannel.send(JSON.stringify({
+                    kind: 'file-meta', id: fileId, name: file.name,
+                    size: file.size, mime: file.type, totalChunks
+                }));
                 for (let i = 0; i < totalChunks; i++) {
-                    // Backpressure: wait if buffer is getting full
-                    while (dataChannel.bufferedAmount > 256 * 1024) {
-                        await sleep(10);
-                    }
+                    while (dataChannel.bufferedAmount > 256 * 1024) await sleep(10);
                     const slice = buf.slice(i * CHUNK, (i + 1) * CHUNK);
                     dataChannel.send(slice);
-                    updateProgress(fileId, Math.round(((i + 1) / totalChunks) * 100));
+                    transferStats[fileId].bytesTransferred += slice.byteLength;
+                    updateSpeedAndProgress(fileId, i + 1, totalChunks, file.size);
                     if (i % 8 === 0) await sleep(0);
                 }
             } else {
-                // Fallback: send via WebSocket relay
-                relay(meta);
+                // WS relay fallback
+                relay({ kind: 'file-meta', id: fileId, name: file.name, size: file.size, mime: file.type, totalChunks });
                 for (let i = 0; i < totalChunks; i++) {
                     const slice = buf.slice(i * CHUNK, (i + 1) * CHUNK);
                     relay({ kind: 'file-chunk', idx: i, bytes: Array.from(new Uint8Array(slice)) });
-                    updateProgress(fileId, Math.round(((i + 1) / totalChunks) * 100));
+                    transferStats[fileId].bytesTransferred += slice.byteLength;
+                    updateSpeedAndProgress(fileId, i + 1, totalChunks, file.size);
                     if (i % 4 === 0) await sleep(0);
                 }
+            }
+
+            // Mark done
+            const metaEl2 = document.getElementById('meta-' + fileId);
+            if (metaEl2) metaEl2.textContent = `${fmtSize(file.size)} · ✓ Sent`;
+            delete pendingOutgoing[fileId];
+            delete transferStats[fileId];
+        }
+
+        function onFileDeclined(fileId) {
+            const metaEl = document.getElementById('meta-' + fileId);
+            if (metaEl) metaEl.textContent = fmtSize(pendingOutgoing[fileId]?.file?.size || 0) + ' · ✗ Declined';
+            delete pendingOutgoing[fileId];
+        }
+
+        // Receiver sees this when a file-request arrives
+        function showFileRequest(data) {
+            const wrap = document.createElement('div');
+            wrap.className = 'msg-wrapper received';
+            wrap.id = data.fileId;
+            wrap.innerHTML = `
+                <div class="msg-nick">${esc(peerNick)}</div>
+                <div class="msg file-msg" style="flex-direction:column;align-items:stretch;">
+                    <div style="display:flex;gap:12px;align-items:flex-start;">
+                        <div class="file-icon">📄</div>
+                        <div class="file-info">
+                            <div class="file-name">${esc(data.name)}</div>
+                            <div class="file-meta" id="meta-${data.fileId}">${fmtSize(data.size)} · ${data.useRTC ? '🔒 P2P' : '🔁 Relay'}</div>
+                        </div>
+                    </div>
+                    <div class="file-actions">
+                        <button class="btn-accept" onclick="acceptFile('${data.fileId}')">✓ Accept</button>
+                        <button class="btn-decline" onclick="declineFile('${data.fileId}')">✗ Decline</button>
+                    </div>
+                </div>`;
+            appendToChat(wrap);
+        }
+
+        function acceptFile(fileId) {
+            relay({ kind: 'file-accepted', fileId });
+            // Replace buttons with progress bar
+            const actionsEl = document.querySelector(`#${fileId} .file-actions`);
+            if (actionsEl) {
+                actionsEl.outerHTML = `
+                    <div class="progress-wrap"><div class="progress-bar" id="bar-${fileId}"></div></div>
+                    <div class="progress-stats"><span id="pct-${fileId}">0%</span><span id="spd-${fileId}"></span></div>`;
+            }
+            const metaEl = document.getElementById('meta-' + fileId);
+            if (metaEl) metaEl.textContent = metaEl.textContent.replace(/·.*/, '· Receiving...');
+            // Prepare incoming state
+            // (actual data will arrive via file-meta + file-chunk or DataChannel)
+        }
+
+        function declineFile(fileId) {
+            relay({ kind: 'file-declined', fileId });
+            const wrap = document.getElementById(fileId);
+            if (wrap) {
+                const metaEl = document.getElementById('meta-' + fileId);
+                if (metaEl) metaEl.textContent = metaEl.textContent.replace(/·.*/, '· Declined');
+                const actionsEl = wrap.querySelector('.file-actions');
+                if (actionsEl) actionsEl.remove();
             }
         }
 
@@ -1217,37 +1367,59 @@
 
             const wrap = document.getElementById(meta.id);
             if (wrap) {
+                const metaEl = document.getElementById('meta-' + meta.id);
+                if (metaEl) metaEl.textContent = `${fmtSize(meta.size)} · ⬇ Tap to Download`;
                 const msgDiv = wrap.querySelector('.msg');
-                msgDiv.innerHTML = buildFileHTML(meta.name, meta.size, '⬇ Tap to Download');
-                msgDiv.onclick = () => triggerDownload(url, meta.name);
-                msgDiv.style.cursor = 'pointer';
+                if (msgDiv) {
+                    msgDiv.style.cursor = 'pointer';
+                    msgDiv.onclick = () => triggerDownload(url, meta.name);
+                }
+                // Remove progress stats
+                const statsEl = wrap.querySelector('.progress-stats');
+                if (statsEl) statsEl.remove();
             }
+            delete transferStats[meta.id];
             incomingMeta = null; incomingChunks = []; incomingCount = 0;
         }
 
         function appendFileProgress(meta, senderName, mode) {
+            // Only called for WS relay chunks that arrive without accept flow
+            // (shouldn't happen in normal flow but kept as safety)
             const wrap = document.createElement('div');
             wrap.className = 'msg-wrapper received';
             wrap.id = meta.id;
-            wrap.innerHTML = `<div class="msg-nick">${esc(senderName)}</div>
-        <div class="msg file-msg">${buildFileHTML(meta.name, meta.size, 'Receiving...')}
-            <div class="progress-wrap"><div class="progress-bar" id="bar-${meta.id}"></div></div>
-            <div class="transfer-mode">${mode === 'p2p' ? '🔒 P2P Direct' : '🔁 Via Relay'}</div>
-        </div>`;
+            wrap.innerHTML = `
+                <div class="msg-nick">${esc(senderName)}</div>
+                <div class="msg file-msg" style="flex-direction:column;align-items:stretch;">
+                    <div style="display:flex;gap:12px;align-items:flex-start;">
+                        <div class="file-icon">📄</div>
+                        <div class="file-info">
+                            <div class="file-name">${esc(meta.name)}</div>
+                            <div class="file-meta" id="meta-${meta.id}">${fmtSize(meta.size)} · Receiving...</div>
+                        </div>
+                    </div>
+                    <div class="progress-wrap"><div class="progress-bar" id="bar-${meta.id}"></div></div>
+                    <div class="progress-stats"><span id="pct-${meta.id}">0%</span><span id="spd-${meta.id}"></span></div>
+                </div>`;
             appendToChat(wrap);
+            transferStats[meta.id] = { startTime: Date.now(), bytesTransferred: 0 };
         }
 
-        function buildFileHTML(name, size, sub) {
-            return `<div class="file-icon">📄</div>
-            <div>
-              <div class="file-name">${esc(name)}</div>
-              <div class="file-meta">${fmtSize(size)} · ${sub}</div>
-            </div>`;
-        }
+        function updateSpeedAndProgress(id, chunksReceived, totalChunks, totalSize) {
+            const pct = Math.round((chunksReceived / totalChunks) * 100);
+            const bar = document.getElementById('bar-' + id);
+            if (bar) bar.style.width = pct + '%';
+            const pctEl = document.getElementById('pct-' + id);
+            if (pctEl) pctEl.textContent = pct + '%';
 
-        function updateProgress(id, pct) {
-            const b = document.getElementById('bar-' + id);
-            if (b) b.style.width = pct + '%';
+            const stats = transferStats[id];
+            if (stats) {
+                const elapsed = (Date.now() - stats.startTime) / 1000;
+                const bytesReceived = (chunksReceived / totalChunks) * totalSize;
+                const speed = elapsed > 0 ? bytesReceived / elapsed : 0;
+                const spdEl = document.getElementById('spd-' + id);
+                if (spdEl) spdEl.textContent = fmtSpeed(speed);
+            }
         }
 
         // ════════════════════════════════════════════════════════════
@@ -1263,6 +1435,11 @@
             if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
             if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
             return (b / 1073741824).toFixed(1) + ' GB';
+        }
+        function fmtSpeed(bps) {
+            if (bps < 1024) return bps.toFixed(0) + ' B/s';
+            if (bps < 1048576) return (bps / 1024).toFixed(1) + ' KB/s';
+            return (bps / 1048576).toFixed(1) + ' MB/s';
         }
         function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
         function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
