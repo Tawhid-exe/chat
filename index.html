@@ -585,7 +585,185 @@ function updateProgress(id, pct) {
     const b = document.getElementById('bar-' + id);
     if (b) b.style.width = pct + '%';
 }
+// ════════════════════════════════════════
+//  CONFIG & STATE
+// ════════════════════════════════════════
+const WS_URL = 'wss://chat-st99.onrender.com';
+let ws = null;
+let myCode = '';
+let myNick = '';
+let peerNick = 'Peer';
 
+const rtcConfig = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { 
+            urls: [
+                'turn:openrelay.metered.ca:80', 
+                'turn:openrelay.metered.ca:443', 
+                'turn:openrelay.metered.ca:443?transport=tcp'
+            ], 
+            username: 'openrelayproject', 
+            credential: 'openrelayproject' 
+        }
+    ],
+    iceCandidatePoolSize: 10
+};
+
+let pc;
+let dataChannel;
+let isInitiator = false;
+let iceQueue = []; // FIX: Holds candidates until the peer is ready
+
+// ════════════════════════════════════════
+//  WEBSOCKET (SIGNALING)
+// ════════════════════════════════════════
+function connectWS() {
+    ws = new WebSocket(WS_URL);
+    ws.onopen = () => {
+        document.getElementById('serverStatus').innerHTML = '<div class="status-dot active"></div> Relay Server Online';
+        document.getElementById('createBtn').disabled = false;
+        document.getElementById('joinBtn').disabled = false;
+    };
+    ws.onmessage = async (e) => {
+        let msg;
+        try { msg = JSON.parse(e.data); } catch { return; }
+        
+        if (msg.type === 'created') {
+            document.getElementById('codeDisplay').textContent = msg.code;
+            document.getElementById('codeBox').classList.remove('hidden');
+            document.getElementById('createBtn').disabled = true;
+            document.getElementById('joinBtn').disabled = true;
+        } else if (msg.type === 'peer_joined') {
+            isInitiator = msg.initiator;
+            sysMsg('Peer found. Initiating secure handshake...');
+            await initWebRTC(); 
+            showChat();
+        } else if (msg.type === 'relay') {
+            await handleWebRTCSignal(msg.data);
+        } else if (msg.type === 'peer_left') {
+            sysMsg('Peer disconnected.');
+            document.getElementById('chatSubtext').innerHTML = '🔴 Session Terminated';
+            enableChat(false);
+        } else if (msg.type === 'error') {
+            if (msg.msg === 'collision') createRoom();
+            else setJoinStatus(msg.msg, 'error');
+        }
+    };
+    ws.onclose = () => {
+        document.getElementById('serverStatus').innerHTML = '<div class="status-dot error"></div> Disconnected. Retrying...';
+        setTimeout(connectWS, 3000);
+    };
+}
+
+function relaySignal(data) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'relay', data }));
+    }
+}
+
+// ════════════════════════════════════════
+//  WEBRTC CORE (ROBUST VERSION)
+// ════════════════════════════════════════
+async function initWebRTC() {
+    if (pc) return; // Prevent double initialization
+    
+    pc = new RTCPeerConnection(rtcConfig);
+
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            relaySignal({ type: 'ice', candidate: event.candidate });
+        }
+    };
+
+    // UI Updates based on connection health
+    pc.oniceconnectionstatechange = () => {
+        console.log("ICE State:", pc.iceConnectionState);
+        if (pc.iceConnectionState === 'failed') {
+            sysMsg("Connection failed. Check if your firewall blocks WebRTC.");
+            document.getElementById('chatSubtext').innerHTML = `⚠️ Connection Failed`;
+        }
+    };
+
+    if (isInitiator) {
+        dataChannel = pc.createDataChannel('donkeyData', { reliable: true });
+        setupDataChannel();
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        relaySignal({ type: 'offer', sdp: pc.localDescription });
+    } else {
+        pc.ondatachannel = (event) => {
+            dataChannel = event.channel;
+            setupDataChannel();
+        };
+    }
+}
+
+async function handleWebRTCSignal(data) {
+    if (!pc) await initWebRTC();
+
+    if (data.type === 'offer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        relaySignal({ type: 'answer', sdp: pc.localDescription });
+        processIceQueue(); // Now ready for ICE
+    } else if (data.type === 'answer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        processIceQueue(); // Now ready for ICE
+    } else if (data.type === 'ice') {
+        if (pc.remoteDescription) {
+            await pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(console.error);
+        } else {
+            iceQueue.push(data.candidate); // Queue it until Description is set
+        }
+    }
+}
+
+async function processIceQueue() {
+    while (iceQueue.length > 0) {
+        const cand = iceQueue.shift();
+        await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(console.error);
+    }
+}
+
+// ════════════════════════════════════════
+//  DATA CHANNEL HANDLER
+// ════════════════════════════════════════
+function setupDataChannel() {
+    dataChannel.binaryType = 'arraybuffer';
+    
+    dataChannel.onopen = () => {
+        document.getElementById('chatSubtext').innerHTML = `🟢 P2P Secured`;
+        enableChat(true);
+        dataChannel.send(JSON.stringify({ kind: 'nick', nick: myNick }));
+        sysMsg("Secure tunnel established.");
+    };
+
+    dataChannel.onmessage = (event) => {
+        if (typeof event.data === 'string') {
+            const data = JSON.parse(event.data);
+            if (data.kind === 'nick') {
+                peerNick = data.nick;
+                document.getElementById('chatSubtext').innerHTML = `🟢 Connected to <strong>${esc(peerNick)}</strong>`;
+            } else if (data.kind === 'chat') {
+                addMsg(data.text, 'received', peerNick, data.id);
+                dataChannel.send(JSON.stringify({ kind: 'seen', id: data.id }));
+            } else if (data.kind === 'seen') {
+                const statusEl = document.getElementById('status-' + data.id);
+                if (statusEl) { statusEl.innerText = 'Seen ✔✔'; statusEl.style.color = '#3b82f6'; }
+            } else if (data.kind === 'file-meta') {
+                incomingMeta = data; receiveBuffer = []; receivedBytes = 0;
+                appendFileProgress(data, peerNick);
+            }
+        } else if (event.data instanceof ArrayBuffer) {
+            handleIncomingBuffer(event.data);
+        }
+    };
+}
+// ... (keep the rest of the helper functions: sendMessage, sendFile, fmtSize, esc, etc.)
 // ════════════════════════════════════════
 //  HELPERS
 // ════════════════════════════════════════
