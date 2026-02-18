@@ -4,27 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DonkeyChat - Secure P2P</title>
+    <meta name="description" content="Encrypted P2P chat and file transfer. No accounts, no traces, no server storage.">
     <style>
         :root {
-            /* Premium Dark Theme Variables */
-            --bg-color: #09090b;        /* Deepest black/gray */
-            --surface: #18181b;         /* Card background */
-            --surface-hover: #27272a;   /* Subtle hover state */
-            --border: #3f3f46;          /* Clean, subtle borders */
-            
-            --text-main: #fafafa;       /* Crisp white */
-            --text-muted: #a1a1aa;      /* Soft gray for subtext */
-            
-            --brand-red: #ef4444;       /* Punchy, modern red */
-            --brand-red-hover: #dc2626; /* Darker red for hovers */
+            --bg-color: #09090b;
+            --surface: #18181b;
+            --surface-hover: #27272a;
+            --border: #3f3f46;
+            --text-main: #fafafa;
+            --text-muted: #a1a1aa;
+            --brand-red: #ef4444;
+            --brand-red-hover: #dc2626;
             --red-glow: rgba(239, 68, 68, 0.15);
-            
+            --green: #22c55e;
             --radius-md: 12px;
             --radius-lg: 16px;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
             background: var(--bg-color);
@@ -41,7 +39,7 @@
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: var(--radius-lg);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px var(--red-glow);
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5), 0 0 40px var(--red-glow);
             max-width: 540px;
             width: 100%;
             overflow: hidden;
@@ -51,71 +49,62 @@
 
         /* --- HEADER --- */
         .header {
-            padding: 32px 32px 24px;
+            padding: 28px 32px 20px;
             text-align: center;
             border-bottom: 1px solid var(--border);
         }
-        .header h1 { 
-            font-size: 24px; 
-            font-weight: 700; 
+        .header h1 {
+            font-size: 22px;
+            font-weight: 700;
             letter-spacing: -0.5px;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 8px;
         }
-        .header p { 
-            color: var(--text-muted); 
-            font-size: 14px; 
-            margin-top: 8px; 
+        .header p {
+            color: var(--text-muted);
+            font-size: 13px;
+            margin-top: 6px;
         }
 
         /* --- SCREENS --- */
-        #setupScreen { padding: 32px; display: flex; flex-direction: column; gap: 24px; }
+        #setupScreen { padding: 28px; display: flex; flex-direction: column; gap: 20px; }
         #chatScreen { display: none; padding: 0; height: 600px; flex-direction: column; }
 
-        /* --- INPUTS & FORMS --- */
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
+        /* --- INPUTS --- */
+        .input-group { display: flex; flex-direction: column; gap: 8px; }
         .input-group label {
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        
         input[type="text"] {
             width: 100%;
             background: var(--bg-color);
             border: 1px solid var(--border);
             color: var(--text-main);
-            padding: 14px 16px;
+            padding: 13px 16px;
             border-radius: var(--radius-md);
             font-size: 15px;
             transition: all 0.2s ease;
         }
-        input[type="text"]:focus { 
-            outline: none; 
-            border-color: var(--brand-red); 
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--brand-red);
             box-shadow: 0 0 0 3px var(--red-glow);
         }
-        input[type="text"]:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
+        input[type="text"]:disabled { opacity: 0.5; cursor: not-allowed; }
 
         /* --- BUTTONS --- */
         .btn-row { display: flex; gap: 12px; }
-        
         button {
-            padding: 14px 20px;
+            padding: 13px 20px;
             border: none;
             border-radius: var(--radius-md);
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s ease;
@@ -125,14 +114,8 @@
             gap: 8px;
         }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
-        
-        .btn-primary {
-            background: var(--brand-red);
-            color: white;
-            flex: 2;
-        }
+        .btn-primary { background: var(--brand-red); color: white; flex: 2; }
         .btn-primary:hover:not(:disabled) { background: var(--brand-red-hover); }
-        
         .btn-secondary {
             background: var(--bg-color);
             color: var(--text-main);
@@ -141,38 +124,74 @@
         }
         .btn-secondary:hover:not(:disabled) { background: var(--surface-hover); border-color: #52525b; }
 
-        /* --- CODE DISPLAY --- */
+        /* --- CODE BOX --- */
         .code-box {
             background: var(--bg-color);
             border: 1px solid var(--border);
             border-radius: var(--radius-md);
-            padding: 24px;
+            padding: 20px;
             text-align: center;
         }
         .code-digits {
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 48px;
+            font-family: 'Courier New', monospace;
+            font-size: 44px;
             font-weight: 700;
             letter-spacing: 8px;
             color: var(--brand-red);
-            margin: 12px 0;
-            text-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+            margin: 10px 0 6px;
+            text-shadow: 0 0 20px rgba(239,68,68,0.2);
         }
+        .code-timer {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+        .code-timer.urgent { color: #f97316; }
+        .code-timer.critical { color: var(--brand-red); animation: pulse 1s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
 
         .join-form { display: flex; gap: 8px; }
         .join-form input { text-align: center; letter-spacing: 4px; font-weight: 600; font-size: 18px; }
 
-        /* --- INFO & STATUS PILLS --- */
+        /* --- STATUS --- */
         .info-box {
-            background: rgba(239, 68, 68, 0.05);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-            padding: 16px;
+            background: rgba(239,68,68,0.05);
+            border: 1px solid rgba(239,68,68,0.2);
+            padding: 14px 16px;
             border-radius: var(--radius-md);
             font-size: 13px;
             color: #fca5a5;
             line-height: 1.6;
         }
         .info-box span { color: var(--brand-red); font-weight: bold; }
+
+        /* WebRTC mode badge */
+        .mode-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 20px;
+            background: rgba(34,197,94,0.1);
+            color: var(--green);
+            border: 1px solid rgba(34,197,94,0.25);
+        }
+        .mode-badge.relay {
+            background: rgba(239,68,68,0.1);
+            color: #f87171;
+            border-color: rgba(239,68,68,0.25);
+        }
+        .mode-badge.connecting {
+            background: rgba(251,191,36,0.1);
+            color: #fbbf24;
+            border-color: rgba(251,191,36,0.25);
+        }
 
         .status-text {
             font-size: 13px;
@@ -185,36 +204,39 @@
             gap: 6px;
         }
         .status-dot {
-            width: 8px;
-            height: 8px;
+            width: 8px; height: 8px;
             border-radius: 50%;
             background: var(--text-muted);
+            flex-shrink: 0;
         }
-        .status-dot.active { background: #22c55e; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); }
+        .status-dot.active { background: var(--green); box-shadow: 0 0 10px rgba(34,197,94,0.4); }
         .status-dot.error { background: var(--brand-red); }
 
         /* --- CHAT SCREEN --- */
         .chat-header {
-            padding: 20px 24px;
+            padding: 16px 20px;
             border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
             background: var(--surface);
+            gap: 10px;
         }
-        .chat-header-info h3 { font-size: 16px; font-weight: 600; }
-        .chat-header-info p { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-        
+        .chat-header-left { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .chat-header-left h3 { font-size: 15px; font-weight: 600; }
+        .chat-header-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .chat-header-meta p { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
         .chat-messages {
             flex: 1;
             overflow-y: auto;
-            padding: 24px;
+            padding: 20px;
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 14px;
             background: var(--bg-color);
         }
-        .chat-messages::-webkit-scrollbar { width: 6px; }
+        .chat-messages::-webkit-scrollbar { width: 5px; }
         .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
 
         .msg-wrapper {
@@ -229,16 +251,17 @@
             font-size: 11px;
             font-weight: 600;
             color: var(--text-muted);
-            margin-bottom: 4px;
+            margin-bottom: 3px;
             padding: 0 4px;
         }
 
         .msg {
-            padding: 12px 16px;
+            padding: 11px 15px;
             border-radius: 16px;
-            font-size: 14.5px;
+            font-size: 14px;
             line-height: 1.5;
             word-wrap: break-word;
+            position: relative;
         }
         .msg-wrapper.sent .msg {
             background: var(--brand-red);
@@ -251,43 +274,63 @@
             color: var(--text-main);
             border-bottom-left-radius: 4px;
         }
-        
+
+        /* Read receipt */
+        .msg-meta {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 3px;
+            padding: 0 4px;
+        }
+        .msg-time {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+        .read-tick {
+            font-size: 12px;
+            color: var(--text-muted);
+            transition: color 0.3s;
+            line-height: 1;
+        }
+        .read-tick.seen { color: #60a5fa; }
+
         .msg.system {
             align-self: center;
             background: transparent;
             color: var(--text-muted);
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 500;
-            padding: 8px 16px;
+            padding: 6px 14px;
             border: 1px dashed var(--border);
             border-radius: 20px;
             max-width: 90%;
             text-align: center;
-            margin: 8px 0;
+            margin: 4px 0;
         }
 
         .chat-input-area {
-            padding: 20px 24px;
+            padding: 16px 20px;
             background: var(--surface);
             border-top: 1px solid var(--border);
             display: flex;
-            gap: 12px;
+            gap: 10px;
             align-items: center;
         }
         .chat-input-area input {
             flex: 1;
-            padding: 14px 16px;
+            padding: 12px 16px;
             background: var(--bg-color);
             border: 1px solid var(--border);
             border-radius: 24px;
             color: white;
             font-size: 14px;
+            transition: border-color 0.2s;
         }
         .chat-input-area input:focus { outline: none; border-color: var(--brand-red); }
-        
+
         .btn-icon {
-            width: 44px;
-            height: 44px;
+            width: 42px; height: 42px;
             border-radius: 50%;
             background: var(--bg-color);
             border: 1px solid var(--border);
@@ -298,25 +341,29 @@
             cursor: pointer;
             flex-shrink: 0;
             transition: 0.2s;
+            font-size: 16px;
         }
         .btn-icon:hover:not(:disabled) { background: var(--surface-hover); color: var(--brand-red); }
-        .btn-send {
-            background: var(--brand-red);
-            border: none;
-            color: white;
-        }
+        .btn-send { background: var(--brand-red); border: none; color: white; }
         .btn-send:hover:not(:disabled) { background: var(--brand-red-hover); color: white; }
 
-        /* File UI styling */
-        .file-msg { display: flex; align-items: center; gap: 12px; cursor: pointer; }
-        .file-icon { font-size: 24px; }
-        .file-name { font-weight: 600; font-size: 14px; }
-        .file-meta { font-size: 12px; opacity: 0.8; margin-top: 2px; }
-        .progress-wrap { margin-top: 8px; height: 4px; background: rgba(0,0,0,0.2); border-radius: 4px; overflow: hidden; }
-        .progress-bar { height: 100%; width: 0%; transition: width 0.2s; }
-        .msg-wrapper.sent .progress-bar { background: white; }
+        /* File UI */
+        .file-msg { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+        .file-icon { font-size: 22px; flex-shrink: 0; }
+        .file-name { font-weight: 600; font-size: 13px; word-break: break-all; }
+        .file-meta { font-size: 11px; opacity: 0.8; margin-top: 2px; }
+        .progress-wrap { margin-top: 8px; height: 3px; background: rgba(0,0,0,0.2); border-radius: 4px; overflow: hidden; }
+        .progress-bar { height: 100%; width: 0%; transition: width 0.15s; }
+        .msg-wrapper.sent .progress-bar { background: rgba(255,255,255,0.7); }
         .msg-wrapper.received .progress-bar { background: var(--brand-red); }
         .msg-wrapper.received .progress-wrap { background: var(--bg-color); }
+
+        /* Transfer mode label */
+        .transfer-mode {
+            font-size: 10px;
+            opacity: 0.7;
+            margin-top: 3px;
+        }
 
         .hidden { display: none !important; }
     </style>
@@ -331,11 +378,11 @@
 
     <div id="setupScreen">
         <div class="status-text" id="serverStatus">
-            <div class="status-dot"></div> Connecting to relay server... (30s-50s needed)
+            <div class="status-dot"></div> Connecting to relay server...
         </div>
-        
+
         <div class="input-group">
-            <label>(Nickname)</label>
+            <label>Nickname</label>
             <input type="text" id="nickInput" placeholder="Enter your display name..." maxlength="20">
         </div>
 
@@ -345,44 +392,51 @@
         </div>
 
         <div id="codeBox" class="code-box hidden">
-            <div class="status-text"><div class="status-dot active"></div> Room Active. Share code with peer.</div>
+            <div class="status-text"><div class="status-dot active"></div> Room Active — Share code with peer</div>
             <div class="code-digits" id="codeDisplay">------</div>
-            <button class="btn-secondary" style="width: 100%;" onclick="copyCode()">📋 Copy Passcode</button>
+            <div class="code-timer" id="codeTimer">⏱ Expires in 10:00</div>
+            <button class="btn-secondary" style="width:100%;" onclick="copyCode()">📋 Copy Passcode</button>
         </div>
 
         <div id="joinSection" class="hidden">
             <div class="input-group">
                 <label>Enter Room Passcode</label>
                 <div class="join-form">
-                    <input type="text" id="joinInput" placeholder="000000" maxlength="6" inputmode="numeric" oninput="this.value=this.value.replace(/\D/g,'')">
-                    <button class="btn-primary" style="flex: 0 0 auto;" onclick="joinRoom()">Connect</button>
+                    <input type="text" id="joinInput" placeholder="000000" maxlength="6"
+                           inputmode="numeric" oninput="this.value=this.value.replace(/\D/g,'')">
+                    <button class="btn-primary" style="flex:0 0 auto;" onclick="joinRoom()">Connect</button>
                 </div>
             </div>
-            <div id="joinStatus" style="margin-top: 12px;"></div>
+            <div id="joinStatus" style="margin-top:10px;"></div>
         </div>
 
         <div class="info-box">
-            <span>Security Note:</span> Chat and files are routed securely through a relay. Maximum file size is 200MB. Files above 50MB may affect browser memory on older mobile devices.
+            <span>How it works:</span> Chat uses your relay server. Files transfer <strong>directly P2P via WebRTC</strong> — your server never sees file data. If WebRTC fails, files fall back through the relay. Max file size: <strong>unlimited</strong> (WebRTC) / 200MB (relay fallback). Room codes expire in <strong>10 minutes</strong>.
         </div>
     </div>
 
     <div id="chatScreen">
         <div class="chat-header">
-            <div class="chat-header-info">
+            <div class="chat-header-left">
                 <h3>Secure Session</h3>
-                <p id="chatSubtext">🟢 Connected to Peer</p>
+                <div class="chat-header-meta">
+                    <p id="chatSubtext">🟢 Connected</p>
+                    <span id="connectionModeBadge" class="mode-badge connecting">⚡ Connecting...</span>
+                </div>
             </div>
-            <button class="btn-secondary" style="padding: 8px 12px; font-size: 13px; flex: none;" onclick="disconnect()">End Session</button>
+            <button class="btn-secondary" style="padding:8px 12px;font-size:12px;flex:none;" onclick="disconnect()">End Session</button>
         </div>
-        
-        <div class="chat-messages" id="chatMessages">
-            </div>
-        
+
+        <div class="chat-messages" id="chatMessages"></div>
+
         <div class="chat-input-area">
             <button class="btn-icon" id="attachBtn" onclick="pickFile()" disabled title="Send File">📎</button>
             <input type="text" id="msgInput" placeholder="Type a secure message..." onkeydown="onKey(event)" disabled>
-            <button class="btn-icon btn-send" id="sendBtn" onclick="sendMessage()" disabled title="Send Message">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            <button class="btn-icon btn-send" id="sendBtn" onclick="sendMessage()" disabled title="Send">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
             </button>
         </div>
         <input type="file" id="fileInput" class="hidden" onchange="sendFile()">
@@ -390,23 +444,87 @@
 </div>
 
 <script>
-// ════════════════════════════════════════
-//  CONFIG & STATE
-// ════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+//  CONFIG
+// ════════════════════════════════════════════════════════════
 const WS_URL = 'wss://chat-st99.onrender.com';
+const CODE_TTL = 10 * 60 * 1000; // 10 minutes
+
+// ICE servers: multiple STUN + TURN fallbacks
+// Priority: Google STUN (free, unlimited) → OpenRelay TURN → ExpressTURN → Cloudflare TURN
+const ICE_SERVERS = [
+    // Google STUN — always free, unlimited
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    // OpenRelay (Metered) — 20GB/month free TURN, ports 80/443, SSL bypass
+    {
+        urls: 'stun:openrelay.metered.ca:80'
+    },
+    {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+    },
+    {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+    },
+    {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+    },
+    // ExpressTURN — 1000GB/month free
+    {
+        urls: 'stun:stun.expressturn.com:3478'
+    },
+    {
+        urls: 'turn:stun.expressturn.com:3478',
+        username: 'efUN6XXXXXXXXXXX',   // placeholder — works without for STUN
+        credential: 'expressturn'
+    },
+    // Cloudflare STUN (public)
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    // Additional public STUN servers
+    { urls: 'stun:stun.stunprotocol.org:3478' },
+    { urls: 'stun:stun.voip.blackberry.com:3478' },
+    { urls: 'stun:stun.nextcloud.com:443' },
+];
+
+// ════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════
 let ws = null;
 let myCode = '';
 let connected = false;
 let myNick = '';
 let peerNick = 'Peer';
+let codeCreatedAt = null;
+let timerInterval = null;
 
+// WebRTC state
+let pc = null;           // RTCPeerConnection
+let dataChannel = null;  // RTCDataChannel for files
+let isInitiator = false; // true = room creator
+let rtcConnected = false;
+let usingRTC = false;    // true = WebRTC data channel active
+
+// File transfer state
 let incomingMeta = null;
 let incomingChunks = [];
 let incomingCount = 0;
 
-// ════════════════════════════════════════
-//  WEBSOCKET
-// ════════════════════════════════════════
+// Read receipts: msgId → DOM element
+let sentMsgMap = {};
+let msgIdCounter = 0;
+
+// ════════════════════════════════════════════════════════════
+//  WEBSOCKET — Signaling + Chat + Fallback
+// ════════════════════════════════════════════════════════════
 function connectWS() {
     ws = new WebSocket(WS_URL);
 
@@ -419,13 +537,14 @@ function connectWS() {
 
     ws.onmessage = (e) => {
         let msg;
-        try { msg = JSON.parse(e.data); } catch(err) { return; }
+        try { msg = JSON.parse(e.data); } catch { return; }
         onServerMsg(msg);
     };
 
     ws.onclose = () => {
         if (connected) sysMsg('Connection to relay lost.');
-        else document.getElementById('serverStatus').innerHTML = '<div class="status-dot error"></div> Server Unreachable (Try Reloading)';
+        else document.getElementById('serverStatus').innerHTML =
+            '<div class="status-dot error"></div> Server Unreachable (Try Reloading)';
     };
 }
 
@@ -433,18 +552,21 @@ function onServerMsg(msg) {
     switch (msg.type) {
         case 'peer_joined':
             connected = true;
-            relay({ kind: 'nick_exchange', nick: myNick });
-            showChat();
-            enableChat(true);
+            // Start WebRTC negotiation
+            if (isInitiator) startWebRTC(true);
+            else startWebRTC(false);
             break;
         case 'relay':
             onRelayData(msg.data);
             break;
         case 'peer_left':
             connected = false;
+            rtcConnected = false;
+            usingRTC = false;
             enableChat(false);
             sysMsg('Peer disconnected.');
             document.getElementById('chatSubtext').innerHTML = '🔴 Session Terminated';
+            updateModeBadge('disconnected');
             break;
         case 'error':
             setJoinStatus(msg.msg || 'Unknown error', 'error');
@@ -455,19 +577,41 @@ function onServerMsg(msg) {
 function onRelayData(data) {
     if (!data) return;
     switch (data.kind) {
+        // ── Chat & identity ──
         case 'nick_exchange':
-            peerNick = data.nick || 'Unknown';
-            document.getElementById('chatSubtext').innerHTML = `🟢 Connected to <strong>${esc(peerNick)}</strong>`;
+            peerNick = data.nick || 'Peer';
+            document.getElementById('chatSubtext').innerHTML =
+                `🟢 Connected to <strong>${esc(peerNick)}</strong>`;
             sysMsg(`Session secured. ${esc(peerNick)} has joined.`);
+            showChat();
+            enableChat(true);
             break;
         case 'chat':
-            addMsg(data.text, 'received', peerNick);
+            addMsg(data.text, 'received', peerNick, data.msgId);
+            // Send read receipt back
+            relay({ kind: 'read_receipt', msgId: data.msgId });
             break;
+        case 'read_receipt':
+            markSeen(data.msgId);
+            break;
+
+        // ── WebRTC Signaling ──
+        case 'rtc_offer':
+            handleOffer(data.sdp);
+            break;
+        case 'rtc_answer':
+            handleAnswer(data.sdp);
+            break;
+        case 'rtc_ice':
+            handleIce(data.candidate);
+            break;
+
+        // ── File transfer (WS fallback only) ──
         case 'file-meta':
             incomingMeta = data;
             incomingChunks = new Array(data.totalChunks);
             incomingCount = 0;
-            appendFileProgress(data, peerNick);
+            appendFileProgress(data, peerNick, 'relay');
             break;
         case 'file-chunk':
             if (!incomingMeta) return;
@@ -485,17 +629,131 @@ function relay(data) {
     }
 }
 
-// ════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+//  WebRTC — P2P Connection
+// ════════════════════════════════════════════════════════════
+function startWebRTC(initiator) {
+    isInitiator = initiator;
+    updateModeBadge('connecting');
+
+    pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+    pc.onicecandidate = (e) => {
+        if (e.candidate) {
+            relay({ kind: 'rtc_ice', candidate: e.candidate });
+        }
+    };
+
+    pc.onconnectionstatechange = () => {
+        const state = pc.connectionState;
+        console.log('RTC connection state:', state);
+        if (state === 'connected') {
+            rtcConnected = true;
+            usingRTC = true;
+            updateModeBadge('p2p');
+            sysMsg('🔒 WebRTC P2P established — files transfer directly between you.');
+        } else if (state === 'failed' || state === 'disconnected') {
+            rtcConnected = false;
+            usingRTC = false;
+            updateModeBadge('relay');
+            if (state === 'failed') sysMsg('⚠️ WebRTC failed — falling back to relay for files.');
+        }
+    };
+
+    pc.ondatachannel = (e) => {
+        setupDataChannel(e.channel);
+    };
+
+    if (initiator) {
+        // Creator opens the data channel
+        const dc = pc.createDataChannel('files', { ordered: true });
+        setupDataChannel(dc);
+
+        pc.createOffer().then(offer => {
+            pc.setLocalDescription(offer);
+            relay({ kind: 'rtc_offer', sdp: offer });
+        });
+    }
+    // Joiner waits for offer (handled in handleOffer)
+}
+
+function setupDataChannel(dc) {
+    dataChannel = dc;
+    dc.binaryType = 'arraybuffer';
+
+    dc.onopen = () => {
+        console.log('DataChannel open');
+        // Exchange nicks over WebSocket (simpler, already connected)
+        relay({ kind: 'nick_exchange', nick: myNick });
+    };
+
+    dc.onmessage = (e) => {
+        onDataChannelMsg(e.data);
+    };
+
+    dc.onerror = (e) => {
+        console.error('DataChannel error:', e);
+    };
+
+    dc.onclose = () => {
+        console.log('DataChannel closed');
+        usingRTC = false;
+    };
+}
+
+async function handleOffer(sdp) {
+    if (!pc) startWebRTC(false);
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    relay({ kind: 'rtc_answer', sdp: answer });
+}
+
+async function handleAnswer(sdp) {
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+}
+
+async function handleIce(candidate) {
+    try {
+        if (pc && candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch(e) { console.warn('ICE error:', e); }
+}
+
+// ════════════════════════════════════════════════════════════
+//  DataChannel Messages (P2P file transfer)
+// ════════════════════════════════════════════════════════════
+function onDataChannelMsg(data) {
+    if (typeof data === 'string') {
+        // JSON control message
+        let msg;
+        try { msg = JSON.parse(data); } catch { return; }
+
+        if (msg.kind === 'file-meta') {
+            incomingMeta = msg;
+            incomingChunks = new Array(msg.totalChunks);
+            incomingCount = 0;
+            appendFileProgress(msg, peerNick, 'p2p');
+        }
+    } else {
+        // Binary chunk
+        if (!incomingMeta) return;
+        incomingChunks[incomingCount] = new Uint8Array(data);
+        incomingCount++;
+        updateProgress(incomingMeta.id, Math.round((incomingCount / incomingMeta.totalChunks) * 100));
+        if (incomingCount === incomingMeta.totalChunks) assembleFile();
+    }
+}
+
+// ════════════════════════════════════════════════════════════
 //  ROOM & SETUP
-// ════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
 function getNickname() {
     const nick = document.getElementById('nickInput').value.trim();
     if (!nick) {
-        document.getElementById('nickInput').focus();
-        // Give the input a quick red flash to indicate error
         const inp = document.getElementById('nickInput');
         inp.style.borderColor = 'var(--brand-red)';
-        setTimeout(() => inp.style.borderColor = 'var(--border)', 1000);
+        inp.focus();
+        setTimeout(() => inp.style.borderColor = 'var(--border)', 1200);
         return null;
     }
     return nick;
@@ -506,12 +764,39 @@ function createRoom() {
     if (!myNick) return;
 
     myCode = String(Math.floor(100000 + Math.random() * 900000));
+    isInitiator = true;
     ws.send(JSON.stringify({ type: 'create', code: myCode }));
     document.getElementById('codeDisplay').textContent = myCode;
     document.getElementById('codeBox').classList.remove('hidden');
     document.getElementById('createBtn').disabled = true;
     document.getElementById('joinBtn').disabled = true;
     document.getElementById('nickInput').disabled = true;
+
+    // Start 10-minute countdown
+    codeCreatedAt = Date.now();
+    startCodeTimer();
+}
+
+function startCodeTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        const elapsed = Date.now() - codeCreatedAt;
+        const remaining = CODE_TTL - elapsed;
+        if (remaining <= 0) {
+            clearInterval(timerInterval);
+            document.getElementById('codeTimer').textContent = '⏱ Expired';
+            document.getElementById('codeTimer').className = 'code-timer critical';
+            sysMsg('Room code expired. Reload to create a new room.');
+            return;
+        }
+        const mins = Math.floor(remaining / 60000);
+        const secs = Math.floor((remaining % 60000) / 1000);
+        const timerEl = document.getElementById('codeTimer');
+        timerEl.textContent = `⏱ Expires in ${mins}:${String(secs).padStart(2,'0')}`;
+        if (remaining < 60000) timerEl.className = 'code-timer critical';
+        else if (remaining < 3 * 60000) timerEl.className = 'code-timer urgent';
+        else timerEl.className = 'code-timer';
+    }, 1000);
 }
 
 function toggleJoin() {
@@ -523,12 +808,9 @@ function toggleJoin() {
 function joinRoom() {
     myNick = getNickname();
     if (!myNick) return;
-
     const code = document.getElementById('joinInput').value.trim();
-    if (code.length !== 6) {
-        setJoinStatus('Passcode must be 6 digits.', 'error');
-        return;
-    }
+    if (code.length !== 6) { setJoinStatus('Passcode must be 6 digits.', 'error'); return; }
+    isInitiator = false;
     document.getElementById('nickInput').disabled = true;
     setJoinStatus('Connecting...', 'loading');
     ws.send(JSON.stringify({ type: 'join', code }));
@@ -536,16 +818,17 @@ function joinRoom() {
 
 function setJoinStatus(text, type) {
     const el = document.getElementById('joinStatus');
-    el.innerHTML = `<div class="status-text" style="color: ${type==='error'?'var(--brand-red)':'var(--text-main)'}">
+    el.innerHTML = `<div class="status-text" style="color:${type==='error'?'var(--brand-red)':'var(--text-main)'}">
         <div class="status-dot ${type==='error'?'error':'active'}"></div> ${text}</div>`;
 }
 
-// ════════════════════════════════════════
-//  CHAT & UI
-// ════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+//  CHAT UI
+// ════════════════════════════════════════════════════════════
 function showChat() {
     document.getElementById('setupScreen').classList.add('hidden');
     document.getElementById('chatScreen').style.display = 'flex';
+    if (timerInterval) clearInterval(timerInterval);
 }
 
 function enableChat(on) {
@@ -554,30 +837,63 @@ function enableChat(on) {
     document.getElementById('attachBtn').disabled = !on;
 }
 
+function updateModeBadge(mode) {
+    const badge = document.getElementById('connectionModeBadge');
+    if (mode === 'p2p') {
+        badge.className = 'mode-badge';
+        badge.textContent = '🔒 P2P Direct';
+    } else if (mode === 'relay') {
+        badge.className = 'mode-badge relay';
+        badge.textContent = '🔁 Relay Mode';
+    } else if (mode === 'connecting') {
+        badge.className = 'mode-badge connecting';
+        badge.textContent = '⚡ Connecting...';
+    } else {
+        badge.className = 'mode-badge relay';
+        badge.textContent = '🔴 Disconnected';
+    }
+}
+
 function sendMessage() {
     const inp = document.getElementById('msgInput');
     const text = inp.value.trim();
     if (!text || !connected) return;
-    relay({ kind: 'chat', text });
-    addMsg(text, 'sent', myNick);
+
+    const msgId = 'msg_' + (++msgIdCounter) + '_' + Date.now();
+    relay({ kind: 'chat', text, msgId });
+    const el = addMsg(text, 'sent', myNick, msgId);
+    sentMsgMap[msgId] = el;
     inp.value = '';
 }
 
 function onKey(e) { if (e.key === 'Enter') sendMessage(); }
 
-function addMsg(text, side, senderName) {
+function addMsg(text, side, senderName, msgId) {
     const wrap = document.createElement('div');
     wrap.className = `msg-wrapper ${side}`;
-    
+
+    const now = new Date();
+    const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+
     let html = '';
-    // Show nickname above the bubble
-    if (senderName) {
-        html += `<div class="msg-nick">${esc(senderName)}</div>`;
-    }
+    if (senderName) html += `<div class="msg-nick">${esc(senderName)}</div>`;
     html += `<div class="msg">${esc(text)}</div>`;
-    
+    html += `<div class="msg-meta">
+        <span class="msg-time">${timeStr}</span>
+        ${side === 'sent' ? `<span class="read-tick" id="tick_${msgId}">✓</span>` : ''}
+    </div>`;
+
     wrap.innerHTML = html;
     appendToChat(wrap);
+    return wrap;
+}
+
+function markSeen(msgId) {
+    const tick = document.getElementById('tick_' + msgId);
+    if (tick) {
+        tick.textContent = '✓✓';
+        tick.classList.add('seen');
+    }
 }
 
 function sysMsg(text) {
@@ -593,9 +909,9 @@ function appendToChat(el) {
     box.scrollTop = box.scrollHeight;
 }
 
-// ════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
 //  FILE TRANSFER
-// ════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
 function pickFile() { document.getElementById('fileInput').click(); }
 
 async function sendFile() {
@@ -604,28 +920,56 @@ async function sendFile() {
     if (!file || !connected) return;
     inp.value = '';
 
-    if (file.size > 200 * 1024 * 1024) return alert('Max file size is 200 MB.');
-    if (file.size > 50 * 1024 * 1024 && !confirm('Files over 50 MB may slow down your browser. Continue?')) return;
-
-    const CHUNK = 16 * 1024;
+    const CHUNK = 16 * 1024; // 16KB chunks — safe for all browsers
     const buf = await file.arrayBuffer();
     const totalChunks = Math.ceil(buf.byteLength / CHUNK);
     const fileId = 'f' + Date.now();
 
-    relay({ kind: 'file-meta', id: fileId, name: file.name, size: file.size, mime: file.type, totalChunks });
-    
+    // Check if WebRTC DataChannel is available and open
+    const useRTC = usingRTC && dataChannel && dataChannel.readyState === 'open';
+    const transferMode = useRTC ? 'p2p' : 'relay';
+
+    if (!useRTC && file.size > 200 * 1024 * 1024) {
+        alert('Relay fallback: Max file size is 200 MB. WebRTC P2P supports larger files.');
+        return;
+    }
+    if (!useRTC && file.size > 50 * 1024 * 1024 && !confirm('Files over 50 MB may slow down your browser via relay. Continue?')) return;
+
+    const meta = { kind: 'file-meta', id: fileId, name: file.name, size: file.size, mime: file.type, totalChunks };
+
+    // Show outgoing file bubble
     const wrap = document.createElement('div');
     wrap.className = 'msg-wrapper sent';
     wrap.id = fileId;
-    wrap.innerHTML = `<div class="msg-nick">${esc(myNick)}</div><div class="msg file-msg">` + buildFileHTML(file.name, file.size, 'Sending...') +
-        `<div class="progress-wrap"><div class="progress-bar" id="bar-${fileId}"></div></div></div>`;
+    wrap.innerHTML = `<div class="msg-nick">${esc(myNick)}</div>
+        <div class="msg file-msg">${buildFileHTML(file.name, file.size, 'Sending...')}
+            <div class="progress-wrap"><div class="progress-bar" id="bar-${fileId}"></div></div>
+            <div class="transfer-mode">${useRTC ? '🔒 P2P Direct' : '🔁 Via Relay'}</div>
+        </div>`;
     appendToChat(wrap);
 
-    for (let i = 0; i < totalChunks; i++) {
-        const slice = buf.slice(i * CHUNK, (i + 1) * CHUNK);
-        relay({ kind: 'file-chunk', idx: i, bytes: Array.from(new Uint8Array(slice)) });
-        updateProgress(fileId, Math.round(((i + 1) / totalChunks) * 100));
-        if (i % 4 === 0) await sleep(0);
+    if (useRTC) {
+        // Send via WebRTC DataChannel
+        dataChannel.send(JSON.stringify(meta));
+        for (let i = 0; i < totalChunks; i++) {
+            // Backpressure: wait if buffer is getting full
+            while (dataChannel.bufferedAmount > 256 * 1024) {
+                await sleep(10);
+            }
+            const slice = buf.slice(i * CHUNK, (i + 1) * CHUNK);
+            dataChannel.send(slice);
+            updateProgress(fileId, Math.round(((i + 1) / totalChunks) * 100));
+            if (i % 8 === 0) await sleep(0);
+        }
+    } else {
+        // Fallback: send via WebSocket relay
+        relay(meta);
+        for (let i = 0; i < totalChunks; i++) {
+            const slice = buf.slice(i * CHUNK, (i + 1) * CHUNK);
+            relay({ kind: 'file-chunk', idx: i, bytes: Array.from(new Uint8Array(slice)) });
+            updateProgress(fileId, Math.round(((i + 1) / totalChunks) * 100));
+            if (i % 4 === 0) await sleep(0);
+        }
     }
 }
 
@@ -642,18 +986,22 @@ function assembleFile() {
     const wrap = document.getElementById(meta.id);
     if (wrap) {
         const msgDiv = wrap.querySelector('.msg');
-        msgDiv.innerHTML = buildFileHTML(meta.name, meta.size, 'Tap to Download');
+        msgDiv.innerHTML = buildFileHTML(meta.name, meta.size, '⬇ Tap to Download');
         msgDiv.onclick = () => triggerDownload(url, meta.name);
+        msgDiv.style.cursor = 'pointer';
     }
     incomingMeta = null; incomingChunks = []; incomingCount = 0;
 }
 
-function appendFileProgress(meta, senderName) {
+function appendFileProgress(meta, senderName, mode) {
     const wrap = document.createElement('div');
     wrap.className = 'msg-wrapper received';
     wrap.id = meta.id;
-    wrap.innerHTML = `<div class="msg-nick">${esc(senderName)}</div><div class="msg file-msg">` + buildFileHTML(meta.name, meta.size, 'Receiving...') +
-        `<div class="progress-wrap"><div class="progress-bar" id="bar-${meta.id}"></div></div></div>`;
+    wrap.innerHTML = `<div class="msg-nick">${esc(senderName)}</div>
+        <div class="msg file-msg">${buildFileHTML(meta.name, meta.size, 'Receiving...')}
+            <div class="progress-wrap"><div class="progress-bar" id="bar-${meta.id}"></div></div>
+            <div class="transfer-mode">${mode === 'p2p' ? '🔒 P2P Direct' : '🔁 Via Relay'}</div>
+        </div>`;
     appendToChat(wrap);
 }
 
@@ -661,7 +1009,7 @@ function buildFileHTML(name, size, sub) {
     return `<div class="file-icon">📄</div>
             <div>
               <div class="file-name">${esc(name)}</div>
-              <div class="file-meta">${fmtSize(size)} • ${sub}</div>
+              <div class="file-meta">${fmtSize(size)} · ${sub}</div>
             </div>`;
 }
 
@@ -670,26 +1018,25 @@ function updateProgress(id, pct) {
     if (b) b.style.width = pct + '%';
 }
 
-// ════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
 //  HELPERS
-// ════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
 function copyCode() {
-    navigator.clipboard.writeText(myCode).then(() => {
-        sysMsg('Passcode copied to clipboard.');
-    });
+    navigator.clipboard.writeText(myCode).then(() => sysMsg('Passcode copied to clipboard.'));
 }
-function disconnect() { if (ws) ws.close(); location.reload(); }
+function disconnect() { if (pc) { pc.close(); pc = null; } if (ws) ws.close(); location.reload(); }
 function triggerDownload(url, name) { const a = document.createElement('a'); a.href = url; a.download = name; a.click(); }
 function fmtSize(b) {
     if (b < 1024) return b + ' B';
     if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
-    return (b / 1048576).toFixed(1) + ' MB';
+    if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+    return (b / 1073741824).toFixed(1) + ' GB';
 }
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 window.addEventListener('load', connectWS);
-window.addEventListener('beforeunload', () => ws && ws.close());
+window.addEventListener('beforeunload', () => { if (pc) pc.close(); if (ws) ws.close(); });
 </script>
 </body>
 </html>
