@@ -391,6 +391,7 @@
             font-size: 14px;
             line-height: 1.5;
             word-wrap: break-word;
+            white-space: pre-wrap;
             position: relative;
         }
 
@@ -452,21 +453,28 @@
             border-top: 1px solid var(--border);
             display: flex;
             gap: 10px;
-            align-items: center;
+            align-items: flex-end;
         }
 
-        .chat-input-area input {
+        .chat-input-area textarea {
             flex: 1;
             padding: 12px 16px;
             background: var(--bg-color);
             border: 1px solid var(--border);
-            border-radius: 24px;
+            border-radius: 20px;
             color: white;
             font-size: 14px;
             transition: border-color 0.2s;
+            resize: none;
+            font-family: inherit;
+            overflow-y: auto;
+            max-height: 150px;
+            min-height: 44px;
+            box-sizing: border-box;
+            line-height: 1.4;
         }
 
-        .chat-input-area input:focus {
+        .chat-input-area textarea:focus {
             outline: none;
             border-color: var(--brand-red);
         }
@@ -692,8 +700,9 @@
 
             <div class="chat-input-area">
                 <button class="btn-icon" id="attachBtn" onclick="pickFile()" disabled title="Send File">📎</button>
-                <input type="text" id="msgInput" placeholder="Type a secure message..." onkeydown="onKey(event)"
-                    disabled>
+                <textarea id="msgInput" placeholder="Type a secure message..." onkeydown="onKey(event)"
+                    oninput="this.style.height='auto';this.style.height=(this.scrollHeight)+'px';" rows="1"
+                    disabled></textarea>
                 <button class="btn-icon btn-send" id="sendBtn" onclick="sendMessage()" disabled title="Send">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
@@ -1160,9 +1169,15 @@
             const el = addMsg(text, 'sent', myNick, msgId);
             sentMsgMap[msgId] = el;
             inp.value = '';
+            inp.style.height = 'auto'; // reset height
         }
 
-        function onKey(e) { if (e.key === 'Enter') sendMessage(); }
+        function onKey(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
 
         function addMsg(text, side, senderName, msgId) {
             const wrap = document.createElement('div');
