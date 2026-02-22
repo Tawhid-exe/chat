@@ -103,17 +103,31 @@
         }
 
         .traffic-badge {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
             display: inline-flex;
             align-items: center;
             gap: 6px;
             background: rgba(34, 197, 94, 0.1);
-            color: var(--green);
-            padding: 4px 10px;
+            color: var(--text-main);
+            padding: 6px 14px;
             border-radius: 20px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
-            margin-top: 10px;
             border: 1px solid rgba(34, 197, 94, 0.2);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .traffic-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--green);
+            background: rgba(34, 197, 94, 0.15);
+            padding: 2px 8px;
+            border-radius: 12px;
         }
 
         .traffic-dot {
@@ -711,20 +725,24 @@
 </head>
 
 <body>
+    <!-- Traffic counter at top-left -->
+    <div class="traffic-badge" id="trafficBadge" style="display: none;">
+        <span>Current Traffic</span>
+        <div class="traffic-pill">
+            <span class="traffic-dot"></span>
+            <span id="trafficCount">1</span> Online
+        </div>
+    </div>
 
     <div class="container">
         <div class="header">
             <h1>🫏 DonkeyChat</h1>
             <p>Encrypted P2P network. Zero traces.</p>
-            <div class="traffic-badge" id="trafficBadge" style="display: none;">
-                <span class="traffic-dot"></span>
-                <span id="trafficCount">1</span> Online
-            </div>
         </div>
 
         <div id="setupScreen">
             <div class="status-text" id="serverStatus">
-                <div class="status-dot"></div> Connecting to relay server...
+                <div class="status-dot"></div> Connecting to relay server... (takes 30-50s max)
             </div>
 
             <div class="input-group">
@@ -787,11 +805,8 @@
                     oninput="this.style.height='auto';this.style.height=(this.scrollHeight)+'px';" rows="1"
                     disabled></textarea>
                 <button class="btn-icon btn-send" id="sendBtn" onclick="sendMessage()" disabled title="Send">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                        fill="currentColor">
-                        <path
-                            d="M3.4 20.4l17.45-7.48c.81-.35.81-1.49 0-1.84L3.4 3.6c-.66-.29-1.39.2-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.06-.87.48-.87.99l.01 4.61c0 .71.73 1.2 1.39.92z" />
-                    </svg>
+                    <img src="https://github.com/Tawhid-exe/chat/blob/main/sendicon.png?raw=true" alt="Send"
+                        style="width:20px;height:20px;object-fit:contain;">
                 </button>
             </div>
             <input type="file" id="fileInput" class="hidden" onchange="sendFile()">
