@@ -706,8 +706,8 @@
             </div>
 
             <div class="info-box">
-                <span>How it works:</span> Chat uses your relay server. Files transfer <strong>directly P2P via
-                    WebRTC</strong> — your server never sees file data. If WebRTC fails, files fall back through the
+                <span>How it works:</span> Chat uses our relay server. Files transfer <strong>directly P2P via
+                    WebRTC</strong> — our server never sees file data. If WebRTC fails, files fall back through the
                 relay. Max file size: <strong>4GB+</strong> (WebRTC) / 100MB (relay fallback). Room codes expire in
                 <strong>10 minutes</strong>.
             </div>
@@ -734,10 +734,10 @@
                     oninput="this.style.height='auto';this.style.height=(this.scrollHeight)+'px';" rows="1"
                     disabled></textarea>
                 <button class="btn-icon btn-send" id="sendBtn" onclick="sendMessage()" disabled title="Send">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="22" y1="2" x2="11" y2="13"></line>
-                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                        fill="currentColor">
+                        <path
+                            d="M3.4 20.4l17.45-7.48c.81-.35.81-1.49 0-1.84L3.4 3.6c-.66-.29-1.39.2-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.06-.87.48-.87.99l.01 4.61c0 .71.73 1.2 1.39.92z" />
                     </svg>
                 </button>
             </div>
