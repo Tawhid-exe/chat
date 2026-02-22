@@ -28,6 +28,33 @@
             box-sizing: border-box;
         }
 
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-color);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #2b2b33;
+        }
+
+        ::-webkit-scrollbar-corner {
+            background: var(--bg-color);
+        }
+
+        ::-webkit-scrollbar-button {
+            display: none;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
             background: var(--bg-color);
@@ -73,6 +100,28 @@
             color: var(--text-muted);
             font-size: 13px;
             margin-top: 6px;
+        }
+
+        .traffic-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--green);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 10px;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .traffic-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--green);
+            border-radius: 50%;
+            box-shadow: 0 0 6px var(--green);
         }
 
         /* --- SCREENS --- */
@@ -667,6 +716,10 @@
         <div class="header">
             <h1>🫏 DonkeyChat</h1>
             <p>Encrypted P2P network. Zero traces.</p>
+            <div class="traffic-badge" id="trafficBadge" style="display: none;">
+                <span class="traffic-dot"></span>
+                <span id="trafficCount">1</span> Online
+            </div>
         </div>
 
         <div id="setupScreen">
@@ -706,8 +759,8 @@
             </div>
 
             <div class="info-box">
-                <span>How it works:</span> Chat uses our relay server. Files transfer <strong>directly P2P via
-                    WebRTC</strong> — our server never sees file data. If WebRTC fails, files fall back through the
+                <span>How it works:</span> Chat uses my relay server. Files transfer <strong>directly P2P via
+                    WebRTC</strong> — my server never sees file data. If WebRTC fails, files fall back through the
                 relay. Max file size: <strong>4GB+</strong> (WebRTC) / 100MB (relay fallback). Room codes expire in
                 <strong>10 minutes</strong>.
             </div>
@@ -863,6 +916,14 @@
 
         function onServerMsg(msg) {
             switch (msg.type) {
+                case 'traffic':
+                    const badge = document.getElementById('trafficBadge');
+                    const count = document.getElementById('trafficCount');
+                    if (badge && count) {
+                        badge.style.display = 'inline-flex';
+                        count.textContent = msg.count;
+                    }
+                    break;
                 case 'peer_joined':
                     connected = true;
                     // IMMEDIATELY exchange nicks via WebSocket and open chat

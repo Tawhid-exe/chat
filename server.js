@@ -37,7 +37,21 @@ setInterval(() => {
     }
 }, 60 * 1000);
 
+let activeConnections = 0;
+
+function broadcastTraffic() {
+    const payload = JSON.stringify({ type: 'traffic', count: activeConnections });
+    wss.clients.forEach(client => {
+        if (client.readyState === 1) {
+            client.send(payload);
+        }
+    });
+}
+
 wss.on('connection', (ws) => {
+    activeConnections++;
+    broadcastTraffic();
+
     let myCode = null;
 
     ws.on('message', (raw) => {
@@ -107,6 +121,9 @@ wss.on('connection', (ws) => {
     });
 
     ws.on('close', () => {
+        activeConnections--;
+        broadcastTraffic();
+
         if (myCode && rooms[myCode]) {
             const room = rooms[myCode];
             const other = room.peers.find(p => p !== ws);
