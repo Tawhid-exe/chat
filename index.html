@@ -708,7 +708,7 @@
             <div class="info-box">
                 <span>How it works:</span> Chat uses your relay server. Files transfer <strong>directly P2P via
                     WebRTC</strong> — your server never sees file data. If WebRTC fails, files fall back through the
-                relay. Max file size: <strong>unlimited</strong> (WebRTC) / 100MB (relay fallback). Room codes expire in
+                relay. Max file size: <strong>4GB+</strong> (WebRTC) / 100MB (relay fallback). Room codes expire in
                 <strong>10 minutes</strong>.
             </div>
         </div>
@@ -734,8 +734,10 @@
                     oninput="this.style.height='auto';this.style.height=(this.scrollHeight)+'px';" rows="1"
                     disabled></textarea>
                 <button class="btn-icon btn-send" id="sendBtn" onclick="sendMessage()" disabled title="Send">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M3 20v-6l8-2-8-2V4l19 8z" />
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                     </svg>
                 </button>
             </div>
@@ -1436,7 +1438,12 @@
 
         function appendFileProgress(meta, senderName, mode) {
             // Only called for WS relay chunks that arrive without accept flow
-            // (shouldn't happen in normal flow but kept as safety)
+            // If the card already exists from file-request, simply update it
+            if (document.getElementById(meta.id)) {
+                transferStats[meta.id] = { startTime: Date.now(), bytesTransferred: 0 };
+                return;
+            }
+
             const wrap = document.createElement('div');
             wrap.className = 'msg-wrapper received';
             wrap.id = meta.id;
