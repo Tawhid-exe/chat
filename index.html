@@ -88,6 +88,7 @@
             padding: 0;
             height: 600px;
             flex-direction: column;
+            position: relative;
         }
 
         /* --- INPUTS --- */
@@ -628,6 +629,35 @@
         .hidden {
             display: none !important;
         }
+
+        /* Drag Overlay */
+        .drag-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(9, 9, 11, 0.85);
+            backdrop-filter: blur(4px);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: var(--brand-red);
+            font-size: 20px;
+            font-weight: 600;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            border: 2px dashed var(--brand-red);
+            border-radius: var(--radius-lg);
+            margin: 10px;
+        }
+
+        #chatScreen.drag-active .drag-overlay {
+            opacity: 1;
+        }
     </style>
 </head>
 
@@ -710,6 +740,9 @@
                 </button>
             </div>
             <input type="file" id="fileInput" class="hidden" onchange="sendFile()">
+            <div class="drag-overlay">
+                <div>📁 Drop File to Send</div>
+            </div>
         </div>
     </div>
 
@@ -1225,11 +1258,15 @@
         // ════════════════════════════════════════════════════════════
         function pickFile() { document.getElementById('fileInput').click(); }
 
-        async function sendFile() {
+        function sendFile() {
             const inp = document.getElementById('fileInput');
             const file = inp.files[0];
-            if (!file || !connected) return;
+            if (file) processFileToSend(file);
             inp.value = '';
+        }
+
+        async function processFileToSend(file) {
+            if (!connected) return;
 
             const CHUNK = 16 * 1024;
             const buf = await file.arrayBuffer();
@@ -1459,7 +1496,39 @@
         function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
         function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-        window.addEventListener('load', connectWS);
+        function bindDragEvents() {
+            const chatScreen = document.getElementById('chatScreen');
+
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                chatScreen.addEventListener(eventName, e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }, false);
+            });
+
+            chatScreen.addEventListener('dragenter', () => chatScreen.classList.add('drag-active'), false);
+            chatScreen.addEventListener('dragover', () => chatScreen.classList.add('drag-active'), false);
+            chatScreen.addEventListener('dragleave', (e) => {
+                if (!chatScreen.contains(e.relatedTarget)) {
+                    chatScreen.classList.remove('drag-active');
+                }
+            }, false);
+
+            chatScreen.addEventListener('drop', (e) => {
+                chatScreen.classList.remove('drag-active');
+                if (!connected) return;
+
+                const file = e.dataTransfer.files[0];
+                if (file) {
+                    processFileToSend(file);
+                }
+            }, false);
+        }
+
+        window.addEventListener('load', () => {
+            connectWS();
+            bindDragEvents();
+        });
         window.addEventListener('beforeunload', () => { if (pc) pc.close(); if (ws) ws.close(); });
     </script>
 </body>
