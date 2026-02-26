@@ -1781,7 +1781,8 @@
                 }));
                 for (let i = 0; i < totalChunks; i++) {
                     if (transferStats[fileId]?.aborted) return; // Stop if cancelled
-                    while (dataChannel.bufferedAmount > 256 * 1024) await sleep(10);
+                    // Buffer threshold mapped to 4MB for high-speed LAN transfers
+                    while (dataChannel.bufferedAmount > 4 * 1024 * 1024) await sleep(5);
                     const slice = buf.slice(i * CHUNK, (i + 1) * CHUNK);
                     dataChannel.send(slice);
                     transferStats[fileId].bytesTransferred += slice.byteLength;
