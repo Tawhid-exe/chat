@@ -51,9 +51,22 @@ wss.on('connection', (ws, req) => {
     activeConnections++;
     broadcastTraffic();
 
+    // Correctly parse IPs for NAT/IPv6 matching
+    let rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    if (rawIp === '::1') rawIp = '127.0.0.1';
+    if (rawIp.includes(',')) rawIp = rawIp.split(',')[0].trim();
+    if (rawIp.startsWith('::ffff:')) rawIp = rawIp.substring(7);
+
+    // If it's IPv6, extract the first /64 (most residential networks assign a /64)
+    let myIp = rawIp;
+    if (myIp.includes(':')) {
+        const parts = myIp.split(':');
+        if (parts.length > 4) myIp = parts.slice(0, 4).join(':') + '::/64';
+    }
+
+    ws.myIp = myIp;
     let myCode = null;
     let myPeerId = null;
-    let myIp = null;
 
     const broadcastDiscovery = (ip) => {
         if (!discovery[ip]) return;
@@ -74,25 +87,21 @@ wss.on('connection', (ws, req) => {
 
         // --- AUTO DISCOVERY ---
         if (msg.type === 'init_discovery') {
-            myIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-            if (myIp === '::1') myIp = '127.0.0.1';
-            if (myIp && myIp.includes(',')) myIp = myIp.split(',')[0].trim();
-
             myPeerId = msg.peerId;
-            if (!discovery[myIp]) discovery[myIp] = {};
-            discovery[myIp][myPeerId] = { ws, nick: msg.nick, os: msg.os };
-            broadcastDiscovery(myIp);
+            if (!discovery[ws.myIp]) discovery[ws.myIp] = {};
+            discovery[ws.myIp][myPeerId] = { ws, nick: msg.nick, os: msg.os };
+            broadcastDiscovery(ws.myIp);
         }
         else if (msg.type === 'request_connect') {
-            if (!discovery[myIp] || !discovery[myIp][msg.target]) return;
-            const targetWs = discovery[myIp][msg.target].ws;
+            if (!discovery[ws.myIp] || !discovery[ws.myIp][msg.target]) return;
+            const targetWs = discovery[ws.myIp][msg.target].ws;
             if (targetWs.readyState === 1) {
-                targetWs.send(JSON.stringify({ type: 'discovery_request', from: myPeerId, nick: discovery[myIp][myPeerId].nick }));
+                targetWs.send(JSON.stringify({ type: 'discovery_request', from: myPeerId, nick: discovery[ws.myIp][myPeerId].nick }));
             }
         }
         else if (msg.type === 'accept_connect') {
-            if (!discovery[myIp] || !discovery[myIp][msg.target]) return;
-            const targetWs = discovery[myIp][msg.target].ws;
+            if (!discovery[ws.myIp] || !discovery[ws.myIp][msg.target]) return;
+            const targetWs = discovery[ws.myIp][msg.target].ws;
 
             myCode = String(Math.floor(100000 + Math.random() * 900000));
             rooms[myCode] = { peers: [targetWs, ws], createdAt: Date.now() };
@@ -106,13 +115,13 @@ wss.on('connection', (ws, req) => {
             ws.roomCode = myCode;
             ws.send(JSON.stringify({ type: 'discovery_accepted', code: myCode, initiator: false }));
 
-            delete discovery[myIp][msg.target];
-            delete discovery[myIp][myPeerId];
-            broadcastDiscovery(myIp);
+            delete discovery[ws.myIp][msg.target];
+            delete discovery[ws.myIp][myPeerId];
+            broadcastDiscovery(ws.myIp);
         }
         else if (msg.type === 'decline_connect') {
-            if (!discovery[myIp] || !discovery[myIp][msg.target]) return;
-            const targetWs = discovery[myIp][msg.target].ws;
+            if (!discovery[ws.myIp] || !discovery[ws.myIp][msg.target]) return;
+            const targetWs = discovery[ws.myIp][msg.target].ws;
             if (targetWs.readyState === 1) {
                 targetWs.send(JSON.stringify({ type: 'error', msg: 'Connection declined by peer.' }));
             }
@@ -130,9 +139,9 @@ wss.on('connection', (ws, req) => {
             ws.send(JSON.stringify({ type: 'created', code: myCode, expiresIn: CODE_TTL_MS }));
 
             // If they created a room manually, hide them from discovery
-            if (myIp && myPeerId && discovery[myIp]) {
-                delete discovery[myIp][myPeerId];
-                broadcastDiscovery(myIp);
+            if (myPeerId && discovery[ws.myIp]) {
+                delete discovery[ws.myIp][myPeerId];
+                broadcastDiscovery(ws.myIp);
             }
         }
         else if (msg.type === 'join') {
@@ -150,9 +159,9 @@ wss.on('connection', (ws, req) => {
             room.peers.push(ws);
             room.peers.forEach(p => p.send(JSON.stringify({ type: 'peer_joined' })));
 
-            if (myIp && myPeerId && discovery[myIp]) {
-                delete discovery[myIp][myPeerId];
-                broadcastDiscovery(myIp);
+            if (myPeerId && discovery[ws.myIp]) {
+                delete discovery[ws.myIp][myPeerId];
+                broadcastDiscovery(ws.myIp);
             }
         }
 
@@ -172,9 +181,9 @@ wss.on('connection', (ws, req) => {
         activeConnections--;
         broadcastTraffic();
 
-        if (myIp && myPeerId && discovery[myIp] && discovery[myIp][myPeerId]) {
-            delete discovery[myIp][myPeerId];
-            broadcastDiscovery(myIp);
+        if (myPeerId && discovery[ws.myIp] && discovery[ws.myIp][myPeerId]) {
+            delete discovery[ws.myIp][myPeerId];
+            broadcastDiscovery(ws.myIp);
         }
 
         const activeCode = ws.roomCode || myCode;

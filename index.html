@@ -1367,9 +1367,9 @@
             }, 10000);
 
             try {
-                // In LAN mode, use no ICE servers — only local candidates for max speed
-                const iceConfig = viaDiscovery ? [] : ICE_SERVERS;
-                pc = new RTCPeerConnection({ iceServers: iceConfig });
+                // We always provide ICE servers. If the devices are on the same LAN, WebRTC will naturally prioritize local 'host' candidates.
+                // If local UDP is blocked by a firewall, it seamlessly falls back to STUN (Hairpinning) instead of failing.
+                pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
             } catch (e) {
                 console.warn('WebRTC not supported:', e);
                 updateModeBadge('relay');
@@ -1382,6 +1382,27 @@
                 }
             };
 
+            // Function to check if the connection is truly local (host candidates)
+            const checkLocalPath = async (pc) => {
+                try {
+                    const stats = await pc.getStats();
+                    let isLocal = false;
+                    stats.forEach(report => {
+                        if (report.type === 'transport') {
+                            const pair = stats.get(report.selectedCandidatePairId);
+                            if (pair) {
+                                const local = stats.get(pair.localCandidateId);
+                                const remote = stats.get(pair.remoteCandidateId);
+                                if (local && remote && local.candidateType === 'host' && remote.candidateType === 'host') {
+                                    isLocal = true;
+                                }
+                            }
+                        }
+                    });
+                    return isLocal;
+                } catch (e) { return false; }
+            };
+
             pc.onconnectionstatechange = () => {
                 const state = pc.connectionState;
                 console.log('RTC connection state:', state);
@@ -1389,8 +1410,22 @@
                     clearTimeout(rtcFallbackTimer);
                     rtcConnected = true;
                     usingRTC = true;
-                    updateModeBadge('p2p');
-                    sysMsg('🔒 WebRTC P2P active — files now transfer directly (faster & private).');
+
+                    // Wait a moment for WebRTC to settle on the optimal candidate pair
+                    setTimeout(async () => {
+                        if (pc.connectionState !== 'connected') return;
+                        const trulyLocal = await checkLocalPath(pc);
+                        if (trulyLocal) {
+                            CHUNK = CHUNK_SIZE_LAN;
+                            updateModeBadge('lan_p2p');
+                            sysMsg('⚡ WebRTC LAN Direct active — files transfer at full local Wi-Fi speed offline.');
+                        } else {
+                            CHUNK = CHUNK_SIZE_DEFAULT;
+                            updateModeBadge('p2p');
+                            sysMsg('🔒 WebRTC P2P active — files transfer directly over internet (STUN Hairpinning). If you expected LAN speeds, your local firewall or router AP-isolation is blocking local UDP traffic.');
+                        }
+                    }, 500);
+
                 } else if (state === 'failed' || state === 'closed') {
                     rtcConnected = false;
                     usingRTC = false;
@@ -1584,12 +1619,15 @@
 
         function updateModeBadge(mode) {
             const badge = document.getElementById('connectionModeBadge');
-            if (mode === 'p2p' || mode === 'rtc') {
-                badge.className = viaDiscovery ? 'mode-badge lan' : 'mode-badge';
-                badge.textContent = viaDiscovery ? '⚡ LAN Direct' : '🔒 P2P Direct';
+            if (mode === 'lan_p2p') {
+                badge.className = 'mode-badge lan';
+                badge.textContent = '⚡ LAN Direct';
+            } else if (mode === 'p2p' || mode === 'rtc') {
+                badge.className = 'mode-badge';
+                badge.textContent = '🔒 P2P (Internet)';
             } else if (mode === 'relay') {
-                badge.className = viaDiscovery ? 'mode-badge lan' : 'mode-badge relay';
-                badge.textContent = viaDiscovery ? '⚡ LAN Relay' : '🔁 Relay Mode';
+                badge.className = 'mode-badge relay';
+                badge.textContent = '🔁 Relay Mode';
             } else if (mode === 'connecting') {
                 badge.className = 'mode-badge connecting';
                 badge.textContent = '⚡ Connecting...';
@@ -2165,7 +2203,6 @@
 
         function finishDiscoveryConnect(code, initiator) {
             viaDiscovery = true;
-            CHUNK = CHUNK_SIZE_LAN;
             myCode = code;
             isInitiator = initiator;
 
@@ -2174,7 +2211,7 @@
             if (timerInterval) clearInterval(timerInterval);
 
             connected = true;
-            sysMsg('⚡ Connected automatically via Local Discovery (LAN).');
+            sysMsg('⚡ Discovery handshake complete. Connecting WebRTC...');
             relay({ kind: 'nick_exchange', nick: getNicknameSilent() });
 
             startWebRTC(isInitiator);
