@@ -12,28 +12,28 @@ app.use((req, res, next) => {
     next();
 });
 
-// Serve static files (index.html, manifest.json, sw.js, icons, etc.)
+// Serve static files
 app.use(express.static('.'));
 
-// rooms[code] = { peers: [ws1, ws2], createdAt: timestamp, used: bool }
+// rooms[code] = { peers: [ws1, ws2], createdAt: timestamp }
 const rooms = {};
-const CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const CODE_TTL_MS = 10 * 60 * 1000;
 
-// Cleanup expired rooms every 60 seconds
+// discovery[ip] = { peerId: { ws, nick, os }, ... }
+const discovery = {};
+
+// Cleanup expired rooms
 setInterval(() => {
     const now = Date.now();
     for (const code in rooms) {
-        const room = rooms[code];
-        if (now - room.createdAt > CODE_TTL_MS) {
-            // Notify any connected peers
-            for (const peer of room.peers) {
-                if (peer.readyState === 1) {
-                    peer.send(JSON.stringify({ type: 'error', msg: 'Room expired.' }));
-                    peer.close();
+        if (now - rooms[code].createdAt > CODE_TTL_MS) {
+            rooms[code].peers.forEach(p => {
+                if (p.readyState === 1) {
+                    p.send(JSON.stringify({ type: 'error', msg: 'Room expired.' }));
+                    p.close();
                 }
-            }
+            });
             delete rooms[code];
-            console.log('Room expired and cleaned:', code);
         }
     }
 }, 60 * 1000);
@@ -43,76 +43,123 @@ let activeConnections = 0;
 function broadcastTraffic() {
     const payload = JSON.stringify({ type: 'traffic', count: activeConnections });
     wss.clients.forEach(client => {
-        if (client.readyState === 1) {
-            client.send(payload);
-        }
+        if (client.readyState === 1) client.send(payload);
     });
 }
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
     activeConnections++;
     broadcastTraffic();
 
     let myCode = null;
+    let myPeerId = null;
+    let myIp = null;
+
+    const broadcastDiscovery = (ip) => {
+        if (!discovery[ip]) return;
+        const peers = Object.keys(discovery[ip]).map(id => ({
+            id, nick: discovery[ip][id].nick, os: discovery[ip][id].os
+        }));
+        for (const id in discovery[ip]) {
+            const clientWs = discovery[ip][id].ws;
+            if (clientWs.readyState === 1) {
+                clientWs.send(JSON.stringify({ type: 'discovery_list', peers: peers.filter(p => p.id !== id) }));
+            }
+        }
+    };
 
     ws.on('message', (raw) => {
         let msg;
         try { msg = JSON.parse(raw); } catch { return; }
 
-        if (msg.type === 'create') {
-            const code = msg.code;
-            const now = Date.now();
+        // --- AUTO DISCOVERY ---
+        if (msg.type === 'init_discovery') {
+            myIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+            if (myIp === '::1') myIp = '127.0.0.1';
+            if (myIp && myIp.includes(',')) myIp = myIp.split(',')[0].trim();
 
-            // Check if code already exists and is not expired
-            if (rooms[code]) {
-                const age = now - rooms[code].createdAt;
-                if (age < CODE_TTL_MS) {
-                    // Code still active — reject
-                    ws.send(JSON.stringify({ type: 'error', msg: 'Code already in use. Please generate a new one.' }));
-                    return;
-                } else {
-                    // Expired — clean it up
-                    delete rooms[code];
-                }
+            myPeerId = msg.peerId;
+            if (!discovery[myIp]) discovery[myIp] = {};
+            discovery[myIp][myPeerId] = { ws, nick: msg.nick, os: msg.os };
+            broadcastDiscovery(myIp);
+        }
+        else if (msg.type === 'request_connect') {
+            if (!discovery[myIp] || !discovery[myIp][msg.target]) return;
+            const targetWs = discovery[myIp][msg.target].ws;
+            if (targetWs.readyState === 1) {
+                targetWs.send(JSON.stringify({ type: 'discovery_request', from: myPeerId, nick: discovery[myIp][myPeerId].nick }));
             }
+        }
+        else if (msg.type === 'accept_connect') {
+            if (!discovery[myIp] || !discovery[myIp][msg.target]) return;
+            const targetWs = discovery[myIp][msg.target].ws;
 
-            myCode = code;
-            rooms[myCode] = { peers: [ws], createdAt: now };
-            ws.send(JSON.stringify({ type: 'created', code: myCode, expiresIn: CODE_TTL_MS }));
-            console.log('Room created:', myCode);
+            myCode = String(Math.floor(100000 + Math.random() * 900000));
+            rooms[myCode] = { peers: [targetWs, ws], createdAt: Date.now() };
+
+            // Inform both peers to transition (targetWs is the initiator)
+            if (targetWs.readyState === 1) {
+                targetWs.send(JSON.stringify({ type: 'discovery_accepted', code: myCode, initiator: true }));
+                // targetWs needs its myCode correctly updated for relaying later
+                targetWs.roomCode = myCode; // store it on the socket object
+            }
+            ws.roomCode = myCode;
+            ws.send(JSON.stringify({ type: 'discovery_accepted', code: myCode, initiator: false }));
+
+            delete discovery[myIp][msg.target];
+            delete discovery[myIp][myPeerId];
+            broadcastDiscovery(myIp);
+        }
+        else if (msg.type === 'decline_connect') {
+            if (!discovery[myIp] || !discovery[myIp][msg.target]) return;
+            const targetWs = discovery[myIp][msg.target].ws;
+            if (targetWs.readyState === 1) {
+                targetWs.send(JSON.stringify({ type: 'error', msg: 'Connection declined by peer.' }));
+            }
         }
 
-        else if (msg.type === 'join') {
-            const room = rooms[msg.code];
-            const now = Date.now();
-
-            if (!room) {
-                ws.send(JSON.stringify({ type: 'error', msg: 'Room not found or expired.' }));
+        // --- STANDARD MANUAL ROOMS ---
+        else if (msg.type === 'create') {
+            if (rooms[msg.code] && Date.now() - rooms[msg.code].createdAt < CODE_TTL_MS) {
+                ws.send(JSON.stringify({ type: 'error', msg: 'Code in use.' }));
                 return;
             }
-            if (now - room.createdAt > CODE_TTL_MS) {
-                delete rooms[msg.code];
-                ws.send(JSON.stringify({ type: 'error', msg: 'Room code has expired.' }));
+            myCode = msg.code;
+            ws.roomCode = myCode;
+            rooms[myCode] = { peers: [ws], createdAt: Date.now() };
+            ws.send(JSON.stringify({ type: 'created', code: myCode, expiresIn: CODE_TTL_MS }));
+
+            // If they created a room manually, hide them from discovery
+            if (myIp && myPeerId && discovery[myIp]) {
+                delete discovery[myIp][myPeerId];
+                broadcastDiscovery(myIp);
+            }
+        }
+        else if (msg.type === 'join') {
+            const room = rooms[msg.code];
+            if (!room || Date.now() - room.createdAt > CODE_TTL_MS) {
+                ws.send(JSON.stringify({ type: 'error', msg: 'Room not found.' }));
                 return;
             }
             if (room.peers.length >= 2) {
-                ws.send(JSON.stringify({ type: 'error', msg: 'Room is full.' }));
+                ws.send(JSON.stringify({ type: 'error', msg: 'Room full.' }));
                 return;
             }
-
             myCode = msg.code;
+            ws.roomCode = myCode;
             room.peers.push(ws);
+            room.peers.forEach(p => p.send(JSON.stringify({ type: 'peer_joined' })));
 
-            // Tell both peers they're connected
-            room.peers[0].send(JSON.stringify({ type: 'peer_joined' }));
-            room.peers[1].send(JSON.stringify({ type: 'peer_joined' }));
-            console.log('Room joined:', myCode);
+            if (myIp && myPeerId && discovery[myIp]) {
+                delete discovery[myIp][myPeerId];
+                broadcastDiscovery(myIp);
+            }
         }
 
+        // --- RELAY ---
         else if (msg.type === 'relay') {
-            // Forward anything to the other peer
-            // Used for: chat msgs, WebRTC signaling (offer/answer/ICE), read receipts, file chunks (fallback)
-            const room = rooms[myCode];
+            const activeCode = ws.roomCode || myCode;
+            const room = rooms[activeCode];
             if (!room) return;
             const other = room.peers.find(p => p !== ws);
             if (other && other.readyState === 1) {
@@ -125,18 +172,20 @@ wss.on('connection', (ws) => {
         activeConnections--;
         broadcastTraffic();
 
-        if (myCode && rooms[myCode]) {
-            const room = rooms[myCode];
-            const other = room.peers.find(p => p !== ws);
+        if (myIp && myPeerId && discovery[myIp] && discovery[myIp][myPeerId]) {
+            delete discovery[myIp][myPeerId];
+            broadcastDiscovery(myIp);
+        }
+
+        const activeCode = ws.roomCode || myCode;
+        if (activeCode && rooms[activeCode]) {
+            const other = rooms[activeCode].peers.find(p => p !== ws);
             if (other && other.readyState === 1) {
                 other.send(JSON.stringify({ type: 'peer_left' }));
             }
-            delete rooms[myCode];
-            console.log('Room closed:', myCode);
+            delete rooms[activeCode];
         }
     });
-
-    ws.on('error', console.error);
 });
 
 server.listen(process.env.PORT || 3000, () => {

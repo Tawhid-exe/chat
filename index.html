@@ -86,6 +86,24 @@
         }
 
         /* --- HEADER --- */
+        /* Discovery Peer Cards */
+        .peer-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .peer-card:hover {
+            border-color: var(--brand-red);
+            background: var(--surface-hover);
+        }
+
         .header {
             padding: 28px 32px 20px;
             text-align: center;
@@ -817,14 +835,30 @@
         }
 
         /* Image Messages */
+        .msg.image-msg {
+            padding: 4px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
         .chat-image {
-            max-width: 280px;
-            max-height: 300px;
-            border-radius: 12px;
+            max-width: 260px;
+            max-height: 260px;
+            border-radius: 14px;
             cursor: pointer;
-            object-fit: contain;
+            object-fit: cover;
+            width: 100%;
             display: block;
             transition: opacity 0.2s;
+        }
+
+        .msg.sent.image-msg .chat-image {
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg.received.image-msg .chat-image {
+            border-bottom-left-radius: 4px;
         }
 
         .chat-image:hover {
@@ -994,7 +1028,8 @@
 
             <div class="input-group">
                 <label>Nickname</label>
-                <input type="text" id="nickInput" placeholder="Enter your display name..." maxlength="20">
+                <input type="text" id="nickInput" placeholder="Enter your display name..." maxlength="20"
+                    oninput="onNickInput()">
             </div>
 
             <div class="btn-row">
@@ -1025,20 +1060,10 @@
                 <div id="joinStatus" style="margin-top:10px;"></div>
             </div>
 
-            <div class="lan-section">
-                <div class="lan-toggle" onclick="toggleLanMode()">
-                    <div class="lan-toggle-label">📡 LAN Mode <span
-                            style="font-weight:400;color:var(--text-muted);font-size:11px">(LocalSend-style)</span>
-                    </div>
-                    <div class="switch" id="lanSwitch"></div>
-                </div>
-                <div id="lanConfig" class="hidden">
-                    <div class="lan-input-row">
-                        <input type="text" id="lanIpInput" placeholder="192.168.1.X:3000">
-                    </div>
-                    <div class="lan-hint">Run <strong>node server.js</strong> on any computer on your WiFi, then enter
-                        its local IP:port above. Transfers at full LAN speed — no internet needed.</div>
-                </div>
+            <div id="discoverySection" class="hidden" style="margin-top:20px; text-align:left;">
+                <h3 style="font-size:14px; color:var(--text-muted); margin-bottom:12px; font-weight:500;">Nearby Devices
+                </h3>
+                <div id="peerList" style="display:flex; flex-direction:column; gap:8px;"></div>
             </div>
 
             <div class="info-box">
@@ -1093,6 +1118,10 @@
         const CHUNK_SIZE_DEFAULT = 16 * 1024;  // 16KB for internet
         const CHUNK_SIZE_LAN = 64 * 1024;      // 64KB for LAN (faster)
         let CHUNK = CHUNK_SIZE_DEFAULT;
+
+        let viaDiscovery = false;
+        let myPeerId = Math.random().toString(36).substr(2, 9);
+        let nickTimeout = null;
 
         // ICE servers: multiple STUN + TURN fallbacks
         // Priority: Google STUN (free, unlimited) → OpenRelay TURN → ExpressTURN → Cloudflare TURN
@@ -1207,6 +1236,15 @@
 
         function onServerMsg(msg) {
             switch (msg.type) {
+                case 'discovery_list':
+                    renderPeers(msg.peers);
+                    break;
+                case 'discovery_request':
+                    handleDiscoveryRequest(msg.from, msg.nick);
+                    break;
+                case 'discovery_accepted':
+                    finishDiscoveryConnect(msg.code, msg.initiator);
+                    break;
                 case 'traffic':
                     const badge = document.getElementById('trafficBadge');
                     const count = document.getElementById('trafficCount');
@@ -1330,7 +1368,7 @@
 
             try {
                 // In LAN mode, use no ICE servers — only local candidates for max speed
-                const iceConfig = lanMode ? [] : ICE_SERVERS;
+                const iceConfig = viaDiscovery ? [] : ICE_SERVERS;
                 pc = new RTCPeerConnection({ iceServers: iceConfig });
             } catch (e) {
                 console.warn('WebRTC not supported:', e);
@@ -1461,19 +1499,6 @@
             myNick = getNickname();
             if (!myNick) return;
 
-            // Apply LAN mode if toggled (reconnects WS if needed)
-            if (lanMode) {
-                applyLanMode();
-                if (ws) ws.close();
-                connectWS();
-                // Wait for connection before creating room
-                const origOnOpen = ws.onopen;
-                ws.onopen = () => {
-                    if (origOnOpen) origOnOpen();
-                    finishCreateRoom();
-                };
-                return;
-            }
             finishCreateRoom();
         }
 
@@ -1532,18 +1557,6 @@
             document.getElementById('nickInput').disabled = true;
             setJoinStatus('Connecting...', 'loading');
 
-            // Apply LAN mode if toggled (reconnects WS if needed)
-            if (lanMode) {
-                applyLanMode();
-                if (ws) ws.close();
-                connectWS();
-                const origOnOpen = ws.onopen;
-                ws.onopen = () => {
-                    if (origOnOpen) origOnOpen();
-                    ws.send(JSON.stringify({ type: 'join', code }));
-                };
-                return;
-            }
             ws.send(JSON.stringify({ type: 'join', code }));
         }
 
@@ -1571,12 +1584,12 @@
 
         function updateModeBadge(mode) {
             const badge = document.getElementById('connectionModeBadge');
-            if (mode === 'p2p') {
-                badge.className = lanMode ? 'mode-badge lan' : 'mode-badge';
-                badge.textContent = lanMode ? '📡 LAN P2P Direct' : '🔒 P2P Direct';
+            if (mode === 'p2p' || mode === 'rtc') {
+                badge.className = viaDiscovery ? 'mode-badge lan' : 'mode-badge';
+                badge.textContent = viaDiscovery ? '⚡ LAN Direct' : '🔒 P2P Direct';
             } else if (mode === 'relay') {
-                badge.className = lanMode ? 'mode-badge lan' : 'mode-badge relay';
-                badge.textContent = lanMode ? '📡 LAN Relay' : '🔁 Relay Mode';
+                badge.className = viaDiscovery ? 'mode-badge lan' : 'mode-badge relay';
+                badge.textContent = viaDiscovery ? '⚡ LAN Relay' : '🔁 Relay Mode';
             } else if (mode === 'connecting') {
                 badge.className = 'mode-badge connecting';
                 badge.textContent = '⚡ Connecting...';
@@ -1705,11 +1718,19 @@
 
             // Add progress bar to sender bubble
             const msgDiv = document.querySelector(`#${fileId} .msg`);
+            const isImage = msgDiv && msgDiv.classList.contains('image-msg');
+
             if (msgDiv) {
-                msgDiv.insertAdjacentHTML('beforeend',
-                    `<div class="progress-wrap"><div class="progress-bar" id="bar-${fileId}"></div></div>
-                     <div class="progress-stats"><span id="pct-${fileId}">0%</span><span id="spd-${fileId}"></span></div>
-                     <button class="btn-decline" style="margin-top:10px; width:100%;" onclick="cancelTransfer('${fileId}')">Cancel Transfer</button>`);
+                if (isImage) {
+                    msgDiv.insertAdjacentHTML('beforeend',
+                        `<div class="progress-wrap" style="margin: 0 4px 4px 4px;"><div class="progress-bar" id="bar-${fileId}"></div></div>
+                         <button class="btn-decline" style="margin: 0 4px 4px 4px; width: calc(100% - 8px); padding: 4px; font-size:11px;" onclick="cancelTransfer('${fileId}')">Cancel</button>`);
+                } else {
+                    msgDiv.insertAdjacentHTML('beforeend',
+                        `<div class="progress-wrap"><div class="progress-bar" id="bar-${fileId}"></div></div>
+                         <div class="progress-stats"><span id="pct-${fileId}">0%</span><span id="spd-${fileId}"></span></div>
+                         <button class="btn-decline" style="margin-top:10px; width:100%;" onclick="cancelTransfer('${fileId}')">Cancel Transfer</button>`);
+                }
             }
 
             transferStats[fileId] = { startTime: Date.now(), bytesTransferred: 0, aborted: false };
@@ -1742,25 +1763,24 @@
                 }
             }
 
-            // Remove cancel button
+            // Remove cancel button & progress bars
             const cancelBtn = msgDiv?.querySelector('.btn-decline');
             if (cancelBtn) cancelBtn.remove();
+            const pWrap = msgDiv?.querySelector('.progress-wrap');
+            if (pWrap) pWrap.remove();
+            const pStats = msgDiv?.querySelector('.progress-stats');
+            if (pStats) pStats.remove();
 
             // Mark done
             if (!transferStats[fileId]?.aborted) {
                 const metaEl2 = document.getElementById('meta-' + fileId);
                 if (metaEl2) metaEl2.textContent = `${fmtSize(file.size)} · ✓ Sent`;
 
-                // If it was an image, update sender preview
+                // If it was an image, update sender preview (no download button needed for sender)
                 const senderImg = document.querySelector(`#${fileId} .chat-image`);
                 if (senderImg) {
                     senderImg.style.opacity = '1';
-                    // Add download button
-                    const downloadBtn = document.createElement('button');
-                    downloadBtn.className = 'img-download-btn';
-                    downloadBtn.textContent = `⬇️ Download · ${fmtSize(file.size)}`;
-                    downloadBtn.onclick = () => triggerDownload(senderImg.src, file.name);
-                    senderImg.parentElement.appendChild(downloadBtn);
+                    senderImg.style.filter = 'none';
                 }
             }
 
@@ -1884,8 +1904,13 @@
                     // Replace file card content with inline image
                     msgDiv.innerHTML = `
                         <img class="chat-image" src="${url}" alt="${esc(meta.name)}" onclick="viewImage('${url}')">
-                        <button class="img-download-btn" onclick="triggerDownload('${url}', '${esc(meta.name)}')">⬇️ Download · ${fmtSize(meta.size)}</button>`;
+                        <div style="display:flex; justify-content:flex-end; padding:2px 4px 2px 0;">
+                            <a href="${url}" download="${esc(meta.name)}" style="color:var(--text-muted); font-size:11px; text-decoration:none; display:flex; gap:4px; align-items:center;">⬇️ Download · ${fmtSize(meta.size)}</a>
+                        </div>`;
                     msgDiv.classList.remove('file-msg');
+                    msgDiv.classList.add('image-msg');
+                    msgDiv.style.background = 'transparent';
+                    msgDiv.style.padding = '4px';
                 } else {
                     const metaEl = document.getElementById('meta-' + meta.id);
                     if (metaEl) metaEl.textContent = `${fmtSize(meta.size)} · ⬇ Tap to Download`;
@@ -2053,7 +2078,9 @@
                 // Show join section if hidden
                 const joinSec = document.getElementById('joinSection');
                 if (joinSec.classList.contains('hidden')) joinSec.classList.remove('hidden');
-                setJoinStatus('QR code scanned! Click Connect to join.', 'loading');
+
+                // Directly trigger join
+                joinRoom();
             }
         }
 
@@ -2068,50 +2095,89 @@
         }
 
         // ════════════════════════════════════════════════════════════
-        //  LAN MODE
+        //  AUTO-DISCOVERY LOGIC
         // ════════════════════════════════════════════════════════════
-        function toggleLanMode() {
-            lanMode = !lanMode;
-            const sw = document.getElementById('lanSwitch');
-            const config = document.getElementById('lanConfig');
-            sw.classList.toggle('active', lanMode);
-            config.classList.toggle('hidden', !lanMode);
+        function getNicknameSilent() {
+            return document.getElementById('nickInput').value.trim();
+        }
 
-            if (lanMode) {
-                // Restore last IP from localStorage
-                const savedIp = localStorage.getItem('donkeychat_lan_ip');
-                if (savedIp) document.getElementById('lanIpInput').value = savedIp;
-                CHUNK = CHUNK_SIZE_LAN;
+        function onNickInput() {
+            clearTimeout(nickTimeout);
+            nickTimeout = setTimeout(() => {
+                const nick = getNicknameSilent();
+                if (nick && ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'init_discovery',
+                        peerId: myPeerId,
+                        nick: nick,
+                        os: getOS()
+                    }));
+                }
+            }, 600);
+        }
+
+        function getOS() {
+            if (/windows phone/i.test(navigator.userAgent)) return "Windows Phone";
+            if (/android/i.test(navigator.userAgent)) return "Android";
+            if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) return "iOS";
+            if (/Mac/.test(navigator.userAgent)) return "Mac";
+            if (/Win/.test(navigator.userAgent)) return "Windows";
+            if (/Linux/.test(navigator.userAgent)) return "Linux";
+            return "Unknown Device";
+        }
+
+        function renderPeers(peers) {
+            const sec = document.getElementById('discoverySection');
+            const list = document.getElementById('peerList');
+            if (peers.length === 0) {
+                sec.classList.add('hidden');
+                list.innerHTML = '';
+                return;
+            }
+            sec.classList.remove('hidden');
+            list.innerHTML = peers.map(p => `
+                <div class="peer-card" onclick="requestDiscoveryConnect('${p.id}')">
+                    <div style="font-size:24px;">\ud83d\udcf1</div>
+                    <div style="flex: 1;">
+                        <div style="font-weight:600;">${esc(p.nick)}</div>
+                        <div style="font-size:11px; color:var(--text-muted);">${esc(p.os)}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function requestDiscoveryConnect(targetId) {
+            if (!getNickname()) return;
+            setJoinStatus('Sending connection request...', 'loading');
+            ws.send(JSON.stringify({ type: 'request_connect', target: targetId }));
+        }
+
+        function handleDiscoveryRequest(fromId, nick) {
+            const myNickSync = getNicknameSilent();
+            if (!myNickSync) return;
+
+            if (confirm(`User ${nick} wants to connect with you via local network. Accept?`)) {
+                ws.send(JSON.stringify({ type: 'accept_connect', target: fromId }));
             } else {
-                CHUNK = CHUNK_SIZE_DEFAULT;
-                WS_URL = REMOTE_WS_URL;
+                ws.send(JSON.stringify({ type: 'decline_connect', target: fromId }));
             }
-
-            localStorage.setItem('donkeychat_lan_mode', lanMode ? '1' : '0');
         }
 
-        function applyLanMode() {
-            if (!lanMode) return;
-            const ip = document.getElementById('lanIpInput').value.trim();
-            if (!ip) return;
-            localStorage.setItem('donkeychat_lan_ip', ip);
-            WS_URL = `ws://${ip}`;
+        function finishDiscoveryConnect(code, initiator) {
+            viaDiscovery = true;
             CHUNK = CHUNK_SIZE_LAN;
-        }
+            myCode = code;
+            isInitiator = initiator;
 
-        function restoreLanMode() {
-            const saved = localStorage.getItem('donkeychat_lan_mode');
-            if (saved === '1') {
-                lanMode = true;
-                const sw = document.getElementById('lanSwitch');
-                const config = document.getElementById('lanConfig');
-                sw.classList.add('active');
-                config.classList.remove('hidden');
-                const savedIp = localStorage.getItem('donkeychat_lan_ip');
-                if (savedIp) document.getElementById('lanIpInput').value = savedIp;
-                CHUNK = CHUNK_SIZE_LAN;
-                WS_URL = `ws://${savedIp}`;
-            }
+            document.getElementById('setupScreen').classList.add('hidden');
+            document.getElementById('chatScreen').style.display = 'flex';
+            if (timerInterval) clearInterval(timerInterval);
+
+            connected = true;
+            sysMsg('⚡ Connected automatically via Local Discovery (LAN).');
+            relay({ kind: 'nick_exchange', nick: getNicknameSilent() });
+
+            startWebRTC(isInitiator);
         }
 
         // ════════════════════════════════════════════════════════════
@@ -2196,10 +2262,9 @@
             wrap.id = fileId;
             wrap.innerHTML = `
                 <div class="msg-nick">${esc(myNick)}</div>
-                <div class="msg">
-                    <img class="chat-image" src="${previewUrl}" alt="${esc(file.name)}" onclick="viewImage('${previewUrl}')" style="opacity:0.7">
-                    <div class="file-meta" id="meta-${fileId}">${fmtSize(file.size)} \u00b7 \u23f3 Waiting for acceptance...</div>
-                    <div class="transfer-mode">${useRTC ? '\ud83d\udd12 P2P Direct' : '\ud83d\udd01 Via Relay'}</div>
+                <div class="msg image-msg" style="background:transparent; padding:4px;">
+                    <img class="chat-image" src="${previewUrl}" alt="${esc(file.name)}" onclick="viewImage('${previewUrl}')" style="opacity:0.6; filter: grayscale(50%);">
+                    <div class="file-meta" id="meta-${fileId}" style="font-size:11px; color:var(--text-muted); opacity:0.8; text-align:right; margin-top:2px;">${fmtSize(file.size)} · ⏳ Waiting...</div>
                 </div>`;
             appendToChat(wrap);
         }
@@ -2270,14 +2335,14 @@
         }
 
         window.addEventListener('load', () => {
-            // Restore LAN mode from localStorage
-            restoreLanMode();
-
-            // Apply LAN mode WS URL if enabled
-            if (lanMode) applyLanMode();
-
             // Connect WebSocket
             connectWS();
+
+            // Wait a moment for WS to configure, then check deep links and bind events
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) onNickInput();
+                else ws.addEventListener('open', () => onNickInput());
+            }, 100);
 
             // Bind drag events
             bindDragEvents();
@@ -2293,11 +2358,8 @@
             }
         });
 
-        window.addEventListener('beforeunload', (e) => {
-            if (connected) {
-                e.preventDefault();
-                e.returnValue = ''; // Required for standard browser confirmation
-            }
+        // Clean up connections on page unload silently without annoying prompts
+        window.addEventListener('unload', () => {
             if (pc) pc.close();
             if (ws) ws.close();
         });
