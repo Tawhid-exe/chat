@@ -1115,8 +1115,8 @@
         const REMOTE_WS_URL = 'wss://chat-st99.onrender.com';
         let WS_URL = REMOTE_WS_URL;
         const CODE_TTL = 10 * 60 * 1000; // 10 minutes
-        const CHUNK_SIZE_DEFAULT = 16 * 1024;  // 16KB for internet
-        const CHUNK_SIZE_LAN = 64 * 1024;      // 64KB for LAN (faster)
+        const CHUNK_SIZE_DEFAULT = 64 * 1024;   // 64KB for internet
+        const CHUNK_SIZE_LAN = 256 * 1024;      // 256KB for LAN (max speed)
         let CHUNK = CHUNK_SIZE_DEFAULT;
 
         let viaDiscovery = false;
