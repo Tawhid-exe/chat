@@ -1342,7 +1342,9 @@
                     if (!incomingMeta) return;
                     incomingChunks[data.idx] = new Uint8Array(data.bytes);
                     incomingCount++;
-                    updateSpeedAndProgress(incomingMeta.id, incomingCount, incomingMeta.totalChunks, incomingMeta.size);
+                    if (incomingCount % 10 === 0 || incomingCount === incomingMeta.totalChunks) {
+                        updateSpeedAndProgress(incomingMeta.id, incomingCount, incomingMeta.totalChunks, incomingMeta.size);
+                    }
                     if (incomingCount === incomingMeta.totalChunks) assembleFile();
                     break;
             }
@@ -1515,11 +1517,13 @@
                     appendFileProgress(msg, peerNick, 'p2p');
                 }
             } else {
-                // Binary chunk via DataChannel
+                // Binary chunk via DataChannel - Store the raw ArrayBuffer without wrapping it in Uint8Array
                 if (!incomingMeta) return;
-                incomingChunks[incomingCount] = new Uint8Array(data);
+                incomingChunks[incomingCount] = data;
                 incomingCount++;
-                updateSpeedAndProgress(incomingMeta.id, incomingCount, incomingMeta.totalChunks, incomingMeta.size);
+                if (incomingCount % 10 === 0 || incomingCount === incomingMeta.totalChunks) {
+                    updateSpeedAndProgress(incomingMeta.id, incomingCount, incomingMeta.totalChunks, incomingMeta.size);
+                }
                 if (incomingCount === incomingMeta.totalChunks) assembleFile();
             }
         }
@@ -1933,12 +1937,11 @@
 
         function assembleFile() {
             const meta = incomingMeta;
-            const total = incomingChunks.reduce((s, c) => s + c.length, 0);
-            const out = new Uint8Array(total);
-            let off = 0;
-            for (const c of incomingChunks) { out.set(c, off); off += c.length; }
 
-            const blob = new Blob([out], { type: meta.mime });
+            // Zero-copy Blob creation: Pass the array of ArrayBuffers (or Uint8Arrays from relay) directly to the Blob constructor.
+            // This prevents the browser from allocating a massive contiguous chunk of RAM and manually copying every byte via out.set(),
+            // which saves Gigabytes of memory and prevents mobile garbage collector freezing.
+            const blob = new Blob(incomingChunks, { type: meta.mime });
             const url = URL.createObjectURL(blob);
             const isImage = meta.mime && meta.mime.startsWith('image/');
 
