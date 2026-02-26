@@ -1790,8 +1790,10 @@
                     const slice = buf.slice(i * CHUNK, (i + 1) * CHUNK);
                     dataChannel.send(slice);
                     transferStats[fileId].bytesTransferred += slice.byteLength;
-                    updateSpeedAndProgress(fileId, i + 1, totalChunks, file.size);
-                    if (i % 8 === 0) await sleep(0);
+
+                    if (i % 10 === 0 || i === totalChunks - 1) {
+                        updateSpeedAndProgress(fileId, i + 1, totalChunks, file.size);
+                    }
                 }
             } else {
                 // WS relay fallback
@@ -1801,8 +1803,11 @@
                     const slice = buf.slice(i * CHUNK, (i + 1) * CHUNK);
                     relay({ kind: 'file-chunk', idx: i, bytes: Array.from(new Uint8Array(slice)) });
                     transferStats[fileId].bytesTransferred += slice.byteLength;
-                    updateSpeedAndProgress(fileId, i + 1, totalChunks, file.size);
-                    if (i % 4 === 0) await sleep(0);
+
+                    if (i % 10 === 0 || i === totalChunks - 1) {
+                        updateSpeedAndProgress(fileId, i + 1, totalChunks, file.size);
+                    }
+                    if (i % 4 === 0) await sleep(0); // Kept yield slightly for relay
                 }
             }
 
