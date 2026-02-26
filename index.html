@@ -786,13 +786,17 @@
         /* QR Scanner Overlay */
         .qr-scanner-overlay {
             position: fixed;
-            inset: 0;
-            z-index: 9999;
-            background: rgba(0, 0, 0, 0.92);
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 1000;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            padding: 20px;
             gap: 16px;
         }
 
@@ -1422,7 +1426,7 @@
                         } else {
                             CHUNK = CHUNK_SIZE_DEFAULT;
                             updateModeBadge('p2p');
-                            sysMsg('🔒 WebRTC P2P active — files transfer directly over internet (STUN Hairpinning). If you expected LAN speeds, your local firewall or router AP-isolation is blocking local UDP traffic.');
+                            sysMsg('🔒 WebRTC P2P (Internet) active — transfer routed via STUN Hairpinning. Set Windows Network to Private to allow offline LAN Direct speeds.');
                         }
                     }, 500);
 
@@ -2064,7 +2068,7 @@
                 <div class="scanner-title">\ud83d\udcf7 Scan Room QR Code</div>
                 <video id="qrVideo" autoplay playsinline></video>
                 <canvas id="qrCanvas" class="hidden"></canvas>
-                <button class="btn-secondary" onclick="closeQRScanner()">Cancel</button>`;
+                <button class="btn-secondary" style="margin-top: 20px; width: 250px;" onclick="closeQRScanner()">Cancel</button>`;
             document.body.appendChild(overlay);
 
             const video = document.getElementById('qrVideo');
