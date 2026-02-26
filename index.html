@@ -1386,7 +1386,7 @@
                 }
             };
 
-            // Function to check if the connection is truly local (host candidates)
+            // Function to check if the connection is truly local (host/prflx candidates)
             const checkLocalPath = async (pc) => {
                 try {
                     const stats = await pc.getStats();
@@ -1397,8 +1397,13 @@
                             if (pair) {
                                 const local = stats.get(pair.localCandidateId);
                                 const remote = stats.get(pair.remoteCandidateId);
-                                if (local && remote && local.candidateType === 'host' && remote.candidateType === 'host') {
-                                    isLocal = true;
+                                // Allow 'host' or 'prflx' (peer-reflexive). 
+                                // 'srflx' (STUN hairpin) and 'relay' (TURN) are strictly internet.
+                                if (local && remote) {
+                                    const allowed = ['host', 'prflx'];
+                                    if (allowed.includes(local.candidateType) && allowed.includes(remote.candidateType)) {
+                                        isLocal = true;
+                                    }
                                 }
                             }
                         }
