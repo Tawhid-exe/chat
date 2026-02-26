@@ -12,7 +12,8 @@ app.use((req, res, next) => {
     next();
 });
 
-app.get('/', (req, res) => res.send('DonkeyChat relay server running 🫏'));
+// Serve static files (index.html, manifest.json, sw.js, icons, etc.)
+app.use(express.static('.'));
 
 // rooms[code] = { peers: [ws1, ws2], createdAt: timestamp, used: bool }
 const rooms = {};

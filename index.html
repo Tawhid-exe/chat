@@ -6,6 +6,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DonkeyChat - Secure P2P</title>
     <meta name="description" content="Encrypted P2P chat and file transfer. No accounts, no traces, no server storage.">
+    <meta name="theme-color" content="#09090b">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icon-192.svg">
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         :root {
             --bg-color: #09090b;
@@ -737,6 +743,231 @@
         #chatScreen.drag-active .drag-overlay {
             opacity: 1;
         }
+
+        /* QR Code Display */
+        .qr-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            margin: 12px 0 6px;
+        }
+
+        .qr-container img,
+        .qr-container canvas {
+            border-radius: 12px;
+            background: white;
+            padding: 10px;
+        }
+
+        .qr-label {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* QR Scanner Overlay */
+        .qr-scanner-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.92);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .qr-scanner-overlay video {
+            width: 300px;
+            height: 300px;
+            object-fit: cover;
+            border-radius: 16px;
+            border: 2px solid var(--brand-red);
+        }
+
+        .qr-scanner-overlay .scanner-title {
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .qr-scanner-overlay .btn-secondary {
+            margin-top: 8px;
+        }
+
+        /* Scan QR button */
+        .btn-scan {
+            padding: 8px 14px;
+            font-size: 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: 0.2s;
+        }
+
+        .btn-scan:hover {
+            background: var(--surface-hover);
+            border-color: var(--brand-red);
+        }
+
+        /* Image Messages */
+        .chat-image {
+            max-width: 280px;
+            max-height: 300px;
+            border-radius: 12px;
+            cursor: pointer;
+            object-fit: contain;
+            display: block;
+            transition: opacity 0.2s;
+        }
+
+        .chat-image:hover {
+            opacity: 0.9;
+        }
+
+        .img-download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            background: transparent;
+            border: 1px solid var(--border);
+            margin-top: 6px;
+            transition: 0.2s;
+        }
+
+        .img-download-btn:hover {
+            background: var(--surface-hover);
+            color: var(--text-main);
+        }
+
+        .msg-wrapper.sent .img-download-btn {
+            border-color: rgba(255, 255, 255, 0.3);
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .msg-wrapper.sent .img-download-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        /* LAN Mode Toggle */
+        .lan-section {
+            margin-top: 12px;
+            padding: 14px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+        }
+
+        .lan-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .lan-toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .switch {
+            position: relative;
+            width: 40px;
+            height: 22px;
+            background: var(--border);
+            border-radius: 22px;
+            transition: 0.3s;
+            flex-shrink: 0;
+        }
+
+        .switch::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            top: 3px;
+            left: 3px;
+            transition: 0.3s;
+        }
+
+        .switch.active {
+            background: var(--green);
+        }
+
+        .switch.active::after {
+            left: 21px;
+        }
+
+        .lan-input-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .lan-input-row input {
+            flex: 1;
+            padding: 8px 12px;
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            color: white;
+            font-size: 13px;
+        }
+
+        .lan-input-row input:focus {
+            outline: none;
+            border-color: var(--green);
+        }
+
+        .lan-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 8px;
+            line-height: 1.5;
+        }
+
+        .mode-badge.lan {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--green);
+            border-color: rgba(34, 197, 94, 0.3);
+        }
+
+        /* Image view overlay */
+        .img-viewer-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.92);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: zoom-out;
+        }
+
+        .img-viewer-overlay img {
+            max-width: 95vw;
+            max-height: 90vh;
+            object-fit: contain;
+            border-radius: 8px;
+        }
     </style>
 </head>
 
@@ -773,9 +1004,10 @@
 
             <div id="codeBox" class="code-box hidden">
                 <div class="status-text">
-                    <div class="status-dot active"></div> Room Active — Share code with peer
+                    <div class="status-dot active"></div> Room Active — Share code or QR with peer
                 </div>
                 <div class="code-digits" id="codeDisplay">------</div>
+                <div class="qr-container" id="qrContainer"></div>
                 <div class="code-timer" id="codeTimer">⏱ Expires in 10:00</div>
                 <button class="btn-secondary" style="width:100%;" onclick="copyCode()">📋 Copy Passcode</button>
             </div>
@@ -788,8 +1020,25 @@
                             oninput="this.value=this.value.replace(/\D/g,'')">
                         <button class="btn-primary" style="flex:0 0 auto;" onclick="joinRoom()">Connect</button>
                     </div>
+                    <button class="btn-scan" onclick="openQRScanner()">📷 Scan QR Code</button>
                 </div>
                 <div id="joinStatus" style="margin-top:10px;"></div>
+            </div>
+
+            <div class="lan-section">
+                <div class="lan-toggle" onclick="toggleLanMode()">
+                    <div class="lan-toggle-label">📡 LAN Mode <span
+                            style="font-weight:400;color:var(--text-muted);font-size:11px">(LocalSend-style)</span>
+                    </div>
+                    <div class="switch" id="lanSwitch"></div>
+                </div>
+                <div id="lanConfig" class="hidden">
+                    <div class="lan-input-row">
+                        <input type="text" id="lanIpInput" placeholder="192.168.1.X:3000">
+                    </div>
+                    <div class="lan-hint">Run <strong>node server.js</strong> on any computer on your WiFi, then enter
+                        its local IP:port above. Transfers at full LAN speed — no internet needed.</div>
+                </div>
             </div>
 
             <div class="info-box">
@@ -817,6 +1066,7 @@
 
             <div class="chat-input-area">
                 <button class="btn-icon" id="attachBtn" onclick="pickFile()" disabled title="Send File">📎</button>
+                <button class="btn-icon" id="imgBtn" onclick="pickImage()" disabled title="Send Image">🖼️</button>
                 <textarea id="msgInput" placeholder="Type a secure message..." onkeydown="onKey(event)"
                     oninput="this.style.height='auto';this.style.height=(this.scrollHeight)+'px';" rows="1"
                     disabled></textarea>
@@ -826,6 +1076,7 @@
                 </button>
             </div>
             <input type="file" id="fileInput" class="hidden" onchange="sendFile()">
+            <input type="file" id="imageInput" class="hidden" accept="image/*" onchange="sendImageFile()">
             <div class="drag-overlay">
                 <div>📁 Drop File to Send</div>
             </div>
@@ -836,8 +1087,12 @@
         // ════════════════════════════════════════════════════════════
         //  CONFIG
         // ════════════════════════════════════════════════════════════
-        const WS_URL = 'wss://chat-st99.onrender.com';
+        const REMOTE_WS_URL = 'wss://chat-st99.onrender.com';
+        let WS_URL = REMOTE_WS_URL;
         const CODE_TTL = 10 * 60 * 1000; // 10 minutes
+        const CHUNK_SIZE_DEFAULT = 16 * 1024;  // 16KB for internet
+        const CHUNK_SIZE_LAN = 64 * 1024;      // 64KB for LAN (faster)
+        let CHUNK = CHUNK_SIZE_DEFAULT;
 
         // ICE servers: multiple STUN + TURN fallbacks
         // Priority: Google STUN (free, unlimited) → OpenRelay TURN → ExpressTURN → Cloudflare TURN
@@ -895,6 +1150,7 @@
         let codeCreatedAt = null;
         let timerInterval = null;
         let chatVisible = false;  // tracks if chat screen is already shown
+        let lanMode = false;      // LAN mode active
 
         // WebRTC state
         let pc = null;           // RTCPeerConnection
@@ -918,6 +1174,10 @@
         // Read receipts: msgId → DOM element
         let sentMsgMap = {};
         let msgIdCounter = 0;
+
+        // QR scanner state
+        let qrScannerStream = null;
+        let qrScanInterval = null;
 
         // ════════════════════════════════════════════════════════════
         //  WEBSOCKET — Signaling + Chat + Fallback
@@ -1069,7 +1329,9 @@
             }, 10000);
 
             try {
-                pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+                // In LAN mode, use no ICE servers — only local candidates for max speed
+                const iceConfig = lanMode ? [] : ICE_SERVERS;
+                pc = new RTCPeerConnection({ iceServers: iceConfig });
             } catch (e) {
                 console.warn('WebRTC not supported:', e);
                 updateModeBadge('relay');
@@ -1199,6 +1461,23 @@
             myNick = getNickname();
             if (!myNick) return;
 
+            // Apply LAN mode if toggled (reconnects WS if needed)
+            if (lanMode) {
+                applyLanMode();
+                if (ws) ws.close();
+                connectWS();
+                // Wait for connection before creating room
+                const origOnOpen = ws.onopen;
+                ws.onopen = () => {
+                    if (origOnOpen) origOnOpen();
+                    finishCreateRoom();
+                };
+                return;
+            }
+            finishCreateRoom();
+        }
+
+        function finishCreateRoom() {
             myCode = String(Math.floor(100000 + Math.random() * 900000));
             isInitiator = true;
             ws.send(JSON.stringify({ type: 'create', code: myCode }));
@@ -1207,6 +1486,9 @@
             document.getElementById('createBtn').disabled = true;
             document.getElementById('joinBtn').disabled = true;
             document.getElementById('nickInput').disabled = true;
+
+            // Generate QR code with join URL
+            generateJoinQR(myCode);
 
             // Start 10-minute countdown
             codeCreatedAt = Date.now();
@@ -1249,6 +1531,19 @@
             isInitiator = false;
             document.getElementById('nickInput').disabled = true;
             setJoinStatus('Connecting...', 'loading');
+
+            // Apply LAN mode if toggled (reconnects WS if needed)
+            if (lanMode) {
+                applyLanMode();
+                if (ws) ws.close();
+                connectWS();
+                const origOnOpen = ws.onopen;
+                ws.onopen = () => {
+                    if (origOnOpen) origOnOpen();
+                    ws.send(JSON.stringify({ type: 'join', code }));
+                };
+                return;
+            }
             ws.send(JSON.stringify({ type: 'join', code }));
         }
 
@@ -1271,16 +1566,17 @@
             document.getElementById('msgInput').disabled = !on;
             document.getElementById('sendBtn').disabled = !on;
             document.getElementById('attachBtn').disabled = !on;
+            document.getElementById('imgBtn').disabled = !on;
         }
 
         function updateModeBadge(mode) {
             const badge = document.getElementById('connectionModeBadge');
             if (mode === 'p2p') {
-                badge.className = 'mode-badge';
-                badge.textContent = '🔒 P2P Direct';
+                badge.className = lanMode ? 'mode-badge lan' : 'mode-badge';
+                badge.textContent = lanMode ? '📡 LAN P2P Direct' : '🔒 P2P Direct';
             } else if (mode === 'relay') {
-                badge.className = 'mode-badge relay';
-                badge.textContent = '🔁 Relay Mode';
+                badge.className = lanMode ? 'mode-badge lan' : 'mode-badge relay';
+                badge.textContent = lanMode ? '📡 LAN Relay' : '🔁 Relay Mode';
             } else if (mode === 'connecting') {
                 badge.className = 'mode-badge connecting';
                 badge.textContent = '⚡ Connecting...';
@@ -1366,7 +1662,6 @@
         async function processFileToSend(file) {
             if (!connected) return;
 
-            const CHUNK = 16 * 1024;
             const buf = await file.arrayBuffer();
             const totalChunks = Math.ceil(buf.byteLength / CHUNK);
             const fileId = 'f' + Date.now();
@@ -1403,7 +1698,6 @@
             const pending = pendingOutgoing[fileId];
             if (!pending) return;
             const { buf, totalChunks, file, useRTC } = pending;
-            const CHUNK = 16 * 1024;
 
             // Update sender bubble to show progress
             const metaEl = document.getElementById('meta-' + fileId);
@@ -1453,9 +1747,21 @@
             if (cancelBtn) cancelBtn.remove();
 
             // Mark done
-            const metaEl2 = document.getElementById('meta-' + fileId);
-            if (metaEl2 && !transferStats[fileId]?.aborted) {
-                metaEl2.textContent = `${fmtSize(file.size)} · ✓ Sent`;
+            if (!transferStats[fileId]?.aborted) {
+                const metaEl2 = document.getElementById('meta-' + fileId);
+                if (metaEl2) metaEl2.textContent = `${fmtSize(file.size)} · ✓ Sent`;
+
+                // If it was an image, update sender preview
+                const senderImg = document.querySelector(`#${fileId} .chat-image`);
+                if (senderImg) {
+                    senderImg.style.opacity = '1';
+                    // Add download button
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.className = 'img-download-btn';
+                    downloadBtn.textContent = `⬇️ Download · ${fmtSize(file.size)}`;
+                    downloadBtn.onclick = () => triggerDownload(senderImg.src, file.name);
+                    senderImg.parentElement.appendChild(downloadBtn);
+                }
             }
 
             delete pendingOutgoing[fileId];
@@ -1561,21 +1867,33 @@
 
             const blob = new Blob([out], { type: meta.mime });
             const url = URL.createObjectURL(blob);
+            const isImage = meta.mime && meta.mime.startsWith('image/');
 
             const wrap = document.getElementById(meta.id);
             if (wrap) {
-                const metaEl = document.getElementById('meta-' + meta.id);
-                if (metaEl) metaEl.textContent = `${fmtSize(meta.size)} · ⬇ Tap to Download`;
                 const msgDiv = wrap.querySelector('.msg');
-                if (msgDiv) {
-                    msgDiv.style.cursor = 'pointer';
-                    msgDiv.onclick = () => triggerDownload(url, meta.name);
-                }
                 // Remove progress stats and cancel button
                 const statsEl = wrap.querySelector('.progress-stats');
                 const cancelBtn = wrap.querySelector('.btn-decline');
+                const progressWrap = wrap.querySelector('.progress-wrap');
                 if (statsEl) statsEl.remove();
                 if (cancelBtn) cancelBtn.remove();
+                if (progressWrap) progressWrap.remove();
+
+                if (isImage && msgDiv) {
+                    // Replace file card content with inline image
+                    msgDiv.innerHTML = `
+                        <img class="chat-image" src="${url}" alt="${esc(meta.name)}" onclick="viewImage('${url}')">
+                        <button class="img-download-btn" onclick="triggerDownload('${url}', '${esc(meta.name)}')">⬇️ Download · ${fmtSize(meta.size)}</button>`;
+                    msgDiv.classList.remove('file-msg');
+                } else {
+                    const metaEl = document.getElementById('meta-' + meta.id);
+                    if (metaEl) metaEl.textContent = `${fmtSize(meta.size)} · ⬇ Tap to Download`;
+                    if (msgDiv) {
+                        msgDiv.style.cursor = 'pointer';
+                        msgDiv.onclick = () => triggerDownload(url, meta.name);
+                    }
+                }
             }
             delete transferStats[meta.id];
             incomingMeta = null; incomingChunks = []; incomingCount = 0;
@@ -1648,6 +1966,275 @@
         function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
         function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+        // ════════════════════════════════════════════════════════════
+        //  QR CODE — Generation & Scanning
+        // ════════════════════════════════════════════════════════════
+        function generateJoinQR(code) {
+            const container = document.getElementById('qrContainer');
+            if (!container) return;
+
+            // Build join URL — use current origin if available, fallback to vercel
+            const base = location.origin && location.origin !== 'null'
+                ? location.origin
+                : 'https://chat-st99.onrender.com';
+            const joinUrl = `${base}?join=${code}`;
+
+            try {
+                const qr = qrcode(0, 'M');
+                qr.addData(joinUrl);
+                qr.make();
+                container.innerHTML = qr.createImgTag(5, 8) +
+                    `<div class="qr-label">Scan to join \u00b7 or share the code above</div>`;
+            } catch (e) {
+                console.warn('QR generation failed:', e);
+                container.innerHTML = '';
+            }
+        }
+
+        function openQRScanner() {
+            // Create overlay
+            const overlay = document.createElement('div');
+            overlay.className = 'qr-scanner-overlay';
+            overlay.id = 'qrScannerOverlay';
+            overlay.innerHTML = `
+                <div class="scanner-title">\ud83d\udcf7 Scan Room QR Code</div>
+                <video id="qrVideo" autoplay playsinline></video>
+                <canvas id="qrCanvas" class="hidden"></canvas>
+                <button class="btn-secondary" onclick="closeQRScanner()">Cancel</button>`;
+            document.body.appendChild(overlay);
+
+            const video = document.getElementById('qrVideo');
+            const canvas = document.getElementById('qrCanvas');
+            const ctx = canvas.getContext('2d');
+
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                .then(stream => {
+                    qrScannerStream = stream;
+                    video.srcObject = stream;
+                    video.play();
+
+                    qrScanInterval = setInterval(() => {
+                        if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                        // Use jsQR to decode
+                        if (typeof jsQR !== 'undefined') {
+                            const result = jsQR(imgData.data, imgData.width, imgData.height);
+                            if (result && result.data) {
+                                handleQRResult(result.data);
+                            }
+                        }
+                    }, 250);
+                })
+                .catch(err => {
+                    console.warn('Camera access denied:', err);
+                    closeQRScanner();
+                    setJoinStatus('Camera access denied. Enter code manually.', 'error');
+                });
+        }
+
+        function handleQRResult(data) {
+            // Extract join code from URL like ?join=123456
+            let code = null;
+            try {
+                const url = new URL(data);
+                code = url.searchParams.get('join');
+            } catch {
+                // Maybe it's just a 6-digit code
+                if (/^\d{6}$/.test(data.trim())) code = data.trim();
+            }
+
+            if (code && /^\d{6}$/.test(code)) {
+                closeQRScanner();
+                document.getElementById('joinInput').value = code;
+                // Show join section if hidden
+                const joinSec = document.getElementById('joinSection');
+                if (joinSec.classList.contains('hidden')) joinSec.classList.remove('hidden');
+                setJoinStatus('QR code scanned! Click Connect to join.', 'loading');
+            }
+        }
+
+        function closeQRScanner() {
+            if (qrScanInterval) { clearInterval(qrScanInterval); qrScanInterval = null; }
+            if (qrScannerStream) {
+                qrScannerStream.getTracks().forEach(t => t.stop());
+                qrScannerStream = null;
+            }
+            const overlay = document.getElementById('qrScannerOverlay');
+            if (overlay) overlay.remove();
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  LAN MODE
+        // ════════════════════════════════════════════════════════════
+        function toggleLanMode() {
+            lanMode = !lanMode;
+            const sw = document.getElementById('lanSwitch');
+            const config = document.getElementById('lanConfig');
+            sw.classList.toggle('active', lanMode);
+            config.classList.toggle('hidden', !lanMode);
+
+            if (lanMode) {
+                // Restore last IP from localStorage
+                const savedIp = localStorage.getItem('donkeychat_lan_ip');
+                if (savedIp) document.getElementById('lanIpInput').value = savedIp;
+                CHUNK = CHUNK_SIZE_LAN;
+            } else {
+                CHUNK = CHUNK_SIZE_DEFAULT;
+                WS_URL = REMOTE_WS_URL;
+            }
+
+            localStorage.setItem('donkeychat_lan_mode', lanMode ? '1' : '0');
+        }
+
+        function applyLanMode() {
+            if (!lanMode) return;
+            const ip = document.getElementById('lanIpInput').value.trim();
+            if (!ip) return;
+            localStorage.setItem('donkeychat_lan_ip', ip);
+            WS_URL = `ws://${ip}`;
+            CHUNK = CHUNK_SIZE_LAN;
+        }
+
+        function restoreLanMode() {
+            const saved = localStorage.getItem('donkeychat_lan_mode');
+            if (saved === '1') {
+                lanMode = true;
+                const sw = document.getElementById('lanSwitch');
+                const config = document.getElementById('lanConfig');
+                sw.classList.add('active');
+                config.classList.remove('hidden');
+                const savedIp = localStorage.getItem('donkeychat_lan_ip');
+                if (savedIp) document.getElementById('lanIpInput').value = savedIp;
+                CHUNK = CHUNK_SIZE_LAN;
+                WS_URL = `ws://${savedIp}`;
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  IMAGE SENDING (with compression)
+        // ════════════════════════════════════════════════════════════
+        function pickImage() { document.getElementById('imageInput').click(); }
+
+        function sendImageFile() {
+            const inp = document.getElementById('imageInput');
+            const file = inp.files[0];
+            if (!file) return;
+            inp.value = '';
+            compressAndSendImage(file);
+        }
+
+        async function compressAndSendImage(file) {
+            if (!connected) return;
+
+            const MAX_DIM = 1200;
+            const QUALITY = 0.7;
+
+            try {
+                // Read file as image
+                const bitmap = await createImageBitmap(file);
+                let w = bitmap.width;
+                let h = bitmap.height;
+
+                // Resize if needed
+                if (w > MAX_DIM || h > MAX_DIM) {
+                    if (w > h) { h = Math.round(h * MAX_DIM / w); w = MAX_DIM; }
+                    else { w = Math.round(w * MAX_DIM / h); h = MAX_DIM; }
+                }
+
+                // Draw onto canvas and export as JPEG
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(bitmap, 0, 0, w, h);
+                bitmap.close();
+
+                const compressedBlob = await new Promise(resolve =>
+                    canvas.toBlob(resolve, 'image/jpeg', QUALITY)
+                );
+
+                const originalSize = file.size;
+                const compressedSize = compressedBlob.size;
+                console.log(`Image compressed: ${fmtSize(originalSize)} → ${fmtSize(compressedSize)} (${Math.round(compressedSize / originalSize * 100)}%)`);
+
+                // Create a File from the blob for processFileToSend
+                const compressedName = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+                const compressedFile = new File([compressedBlob], compressedName, { type: 'image/jpeg' });
+
+                // Show sender's inline preview immediately
+                const previewUrl = URL.createObjectURL(compressedBlob);
+                sendImageWithPreview(compressedFile, previewUrl);
+
+            } catch (e) {
+                console.warn('Image compression failed, sending original:', e);
+                processFileToSend(file);
+            }
+        }
+
+        async function sendImageWithPreview(file, previewUrl) {
+            if (!connected) return;
+
+            const buf = await file.arrayBuffer();
+            const totalChunks = Math.ceil(buf.byteLength / CHUNK);
+            const fileId = 'f' + Date.now();
+            const useRTC = usingRTC && dataChannel && dataChannel.readyState === 'open';
+
+            // Store pending transfer
+            pendingOutgoing[fileId] = { buf, totalChunks, file, useRTC };
+
+            // Send file-request
+            const req = { kind: 'file-request', fileId, name: file.name, size: file.size, mime: file.type, totalChunks, useRTC };
+            relay(req);
+
+            // Show sender's bubble with inline image preview
+            const wrap = document.createElement('div');
+            wrap.className = 'msg-wrapper sent';
+            wrap.id = fileId;
+            wrap.innerHTML = `
+                <div class="msg-nick">${esc(myNick)}</div>
+                <div class="msg">
+                    <img class="chat-image" src="${previewUrl}" alt="${esc(file.name)}" onclick="viewImage('${previewUrl}')" style="opacity:0.7">
+                    <div class="file-meta" id="meta-${fileId}">${fmtSize(file.size)} \u00b7 \u23f3 Waiting for acceptance...</div>
+                    <div class="transfer-mode">${useRTC ? '\ud83d\udd12 P2P Direct' : '\ud83d\udd01 Via Relay'}</div>
+                </div>`;
+            appendToChat(wrap);
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  IMAGE VIEWER (full-screen overlay)
+        // ════════════════════════════════════════════════════════════
+        function viewImage(url) {
+            const overlay = document.createElement('div');
+            overlay.className = 'img-viewer-overlay';
+            overlay.onclick = () => overlay.remove();
+            overlay.innerHTML = `<img src="${url}" alt="Full size image">`;
+            document.body.appendChild(overlay);
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  DEEP-LINK AUTO-JOIN
+        // ════════════════════════════════════════════════════════════
+        function checkDeepLink() {
+            const params = new URLSearchParams(window.location.search);
+            const joinCode = params.get('join');
+            if (joinCode && /^\d{6}$/.test(joinCode)) {
+                // Show join section and fill in the code
+                const joinSec = document.getElementById('joinSection');
+                if (joinSec.classList.contains('hidden')) joinSec.classList.remove('hidden');
+                document.getElementById('joinInput').value = joinCode;
+                // Focus nickname input
+                document.getElementById('nickInput').focus();
+                setJoinStatus('Room code loaded from QR link \u2014 enter nickname and click Connect.', 'loading');
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  DRAG & DROP + INIT
+        // ════════════════════════════════════════════════════════════
         function bindDragEvents() {
             const chatScreen = document.getElementById('chatScreen');
 
@@ -1672,15 +2259,40 @@
 
                 const file = e.dataTransfer.files[0];
                 if (file) {
-                    processFileToSend(file);
+                    // Auto-detect images for inline display
+                    if (file.type.startsWith('image/')) {
+                        compressAndSendImage(file);
+                    } else {
+                        processFileToSend(file);
+                    }
                 }
             }, false);
         }
 
         window.addEventListener('load', () => {
+            // Restore LAN mode from localStorage
+            restoreLanMode();
+
+            // Apply LAN mode WS URL if enabled
+            if (lanMode) applyLanMode();
+
+            // Connect WebSocket
             connectWS();
+
+            // Bind drag events
             bindDragEvents();
+
+            // Check deep-link for auto-join
+            checkDeepLink();
+
+            // Register service worker for PWA
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('SW registered:', reg.scope))
+                    .catch(err => console.warn('SW registration failed:', err));
+            }
         });
+
         window.addEventListener('beforeunload', (e) => {
             if (connected) {
                 e.preventDefault();
