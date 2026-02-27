@@ -808,10 +808,61 @@
             border: 2px solid var(--brand-red);
         }
 
+        .qr-scanner-overlay .btn-secondary {
+            flex: 0 0 auto;
+        }
+
         .qr-scanner-overlay .scanner-title {
             color: white;
             font-size: 16px;
             font-weight: 600;
+        }
+
+        /* Custom Prompt Overlay */
+        .custom-prompt-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .custom-prompt {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            width: 100%;
+            max-width: 320px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .custom-prompt h3 {
+            margin-top: 0;
+            margin-bottom: 12px;
+        }
+
+        .custom-prompt p {
+            color: var(--text-muted);
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 24px;
+        }
+
+        .custom-prompt-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .custom-prompt-actions button {
+            flex: 1;
         }
 
         .qr-scanner-overlay .btn-secondary {
@@ -1096,7 +1147,7 @@
             <div class="chat-input-area">
                 <button class="btn-icon" id="attachBtn" onclick="pickFile()" disabled title="Send File">📎</button>
                 <button class="btn-icon" id="imgBtn" onclick="pickImage()" disabled title="Send Image">🖼️</button>
-                <textarea id="msgInput" placeholder="Type a secure message..." onkeydown="onKey(event)"
+                <textarea id="msgInput" placeholder="Type a message..." onkeydown="onKey(event)"
                     oninput="this.style.height='auto';this.style.height=(this.scrollHeight)+'px';" rows="1"
                     disabled></textarea>
                 <button class="btn-icon btn-send" id="sendBtn" onclick="sendMessage()" disabled title="Send">
@@ -1428,6 +1479,17 @@
                         const trulyLocal = await checkLocalPath(pc);
                         if (trulyLocal) {
                             CHUNK = CHUNK_SIZE_LAN;
+
+                            // Even if they joined via manual QR/Code, if WebRTC finds a local path, upgrade the UI to LAN Direct seamlessly.
+                            if (!document.getElementById('setupScreen').classList.contains('hidden')) {
+                                document.getElementById('setupScreen').classList.add('hidden');
+                                document.getElementById('chatScreen').style.display = 'flex';
+                            }
+                            if (!viaDiscovery) {
+                                document.getElementById('chatSubtext').innerHTML = `🟢 Connected to <strong>${esc(peerNick)}</strong>`;
+                                sysMsg('⚡ Upgraded to LAN Direct mode automatically.');
+                            }
+
                             updateModeBadge('lan_p2p');
                             sysMsg('⚡ WebRTC LAN Direct active — files transfer at full local Wi-Fi speed offline.');
                         } else {
@@ -1726,13 +1788,20 @@
         async function processFileToSend(file) {
             if (!connected) return;
 
-            const buf = await file.arrayBuffer();
-            const totalChunks = Math.ceil(buf.byteLength / CHUNK);
+            // FIX: Don't use file.arrayBuffer() directly. It crashes Chrome for files > 2GB limits.
+            // Calculate chunks using file.size and stream it via slice() later.
+            const totalChunks = Math.ceil(file.size / CHUNK);
             const fileId = 'f' + Date.now();
             const useRTC = usingRTC && dataChannel && dataChannel.readyState === 'open';
 
-            // Store pending transfer — actual send starts after receiver accepts
-            pendingOutgoing[fileId] = { buf, totalChunks, file, useRTC };
+            // Relay Mode File Size Limit Enforcement
+            if (!useRTC && file.size > 100 * 1024 * 1024) {
+                sysMsg(`❌ Cannot send "${esc(file.name)}": File size (${fmtSize(file.size)}) exceeds the 100MB capacity limit for Relay Mode. Please connect via LAN for unlimited file sizes.`);
+                return;
+            }
+
+            // Store pending transfer (buf is null, we stream from 'file' later)
+            pendingOutgoing[fileId] = { buf: null, totalChunks, file, useRTC };
 
             // Send file-request (metadata only, no data yet)
             const req = { kind: 'file-request', fileId, name: file.name, size: file.size, mime: file.type, totalChunks, useRTC };
@@ -1786,38 +1855,54 @@
 
             transferStats[fileId] = { startTime: Date.now(), bytesTransferred: 0, aborted: false };
 
-            if (useRTC && dataChannel && dataChannel.readyState === 'open') {
-                // Send file-meta control message via DataChannel
-                dataChannel.send(JSON.stringify({
-                    kind: 'file-meta', id: fileId, name: file.name,
-                    size: file.size, mime: file.type, totalChunks
-                }));
-                for (let i = 0; i < totalChunks; i++) {
-                    if (transferStats[fileId]?.aborted) return; // Stop if cancelled
-                    // Buffer threshold mapped to 4MB for high-speed LAN transfers
-                    while (dataChannel.bufferedAmount > 4 * 1024 * 1024) await sleep(5);
-                    const slice = buf.slice(i * CHUNK, (i + 1) * CHUNK);
-                    dataChannel.send(slice);
-                    transferStats[fileId].bytesTransferred += slice.byteLength;
+            try {
+                if (useRTC && dataChannel && dataChannel.readyState === 'open') {
+                    // Send file-meta control message via DataChannel
+                    dataChannel.send(JSON.stringify({
+                        kind: 'file-meta', id: fileId, name: file.name,
+                        size: file.size, mime: file.type, totalChunks
+                    }));
+                    for (let i = 0; i < totalChunks; i++) {
+                        if (transferStats[fileId]?.aborted) return; // Stop if cancelled
+                        // Buffer threshold mapped to 4MB for high-speed LAN transfers
+                        while (dataChannel.bufferedAmount > 4 * 1024 * 1024) {
+                            if (transferStats[fileId]?.aborted) return;
+                            await sleep(5);
+                        }
 
-                    if (i % 10 === 0 || i === totalChunks - 1) {
-                        updateSpeedAndProgress(fileId, i + 1, totalChunks, file.size);
+                        // SLICE incrementally from file blob to avert >2GB RAM crashes
+                        const chunkBlob = file.slice(i * CHUNK, (i + 1) * CHUNK);
+                        const sliceBuf = await chunkBlob.arrayBuffer();
+
+                        dataChannel.send(sliceBuf);
+                        transferStats[fileId].bytesTransferred += sliceBuf.byteLength;
+
+                        if (i % 10 === 0 || i === totalChunks - 1) {
+                            updateSpeedAndProgress(fileId, i + 1, totalChunks, file.size);
+                        }
+                    }
+                } else {
+                    // WS relay fallback
+                    relay({ kind: 'file-meta', id: fileId, name: file.name, size: file.size, mime: file.type, totalChunks });
+                    for (let i = 0; i < totalChunks; i++) {
+                        if (transferStats[fileId]?.aborted) return; // Stop if cancelled
+
+                        const chunkBlob = file.slice(i * CHUNK, (i + 1) * CHUNK);
+                        const sliceBuf = await chunkBlob.arrayBuffer();
+
+                        relay({ kind: 'file-chunk', idx: i, bytes: Array.from(new Uint8Array(sliceBuf)) });
+                        transferStats[fileId].bytesTransferred += sliceBuf.byteLength;
+
+                        if (i % 10 === 0 || i === totalChunks - 1) {
+                            updateSpeedAndProgress(fileId, i + 1, totalChunks, file.size);
+                        }
+                        if (i % 4 === 0) await sleep(0); // Kept yield slightly for relay
                     }
                 }
-            } else {
-                // WS relay fallback
-                relay({ kind: 'file-meta', id: fileId, name: file.name, size: file.size, mime: file.type, totalChunks });
-                for (let i = 0; i < totalChunks; i++) {
-                    if (transferStats[fileId]?.aborted) return; // Stop if cancelled
-                    const slice = buf.slice(i * CHUNK, (i + 1) * CHUNK);
-                    relay({ kind: 'file-chunk', idx: i, bytes: Array.from(new Uint8Array(slice)) });
-                    transferStats[fileId].bytesTransferred += slice.byteLength;
-
-                    if (i % 10 === 0 || i === totalChunks - 1) {
-                        updateSpeedAndProgress(fileId, i + 1, totalChunks, file.size);
-                    }
-                    if (i % 4 === 0) await sleep(0); // Kept yield slightly for relay
-                }
+            } catch (err) {
+                console.error("Transfer error:", err);
+                onFileError(fileId, err.message || "Connection interrupted during transfer.");
+                return;
             }
 
             // Remove cancel button & progress bars
@@ -1831,7 +1916,7 @@
             // Mark done
             if (!transferStats[fileId]?.aborted) {
                 const metaEl2 = document.getElementById('meta-' + fileId);
-                if (metaEl2) metaEl2.textContent = `${fmtSize(file.size)} · ✓ Sent`;
+                if (metaEl2) metaEl2.textContent = `${fmtSize(file.size)} · Seen`;
 
                 // If it was an image, update sender preview (no download button needed for sender)
                 const senderImg = document.querySelector(`#${fileId} .chat-image`);
@@ -1924,6 +2009,35 @@
                 if (pStats) pStats.remove();
                 if (btn) btn.remove();
             }
+
+            // Clean up transfer states
+            delete pendingOutgoing[fileId];
+            delete transferStats[fileId];
+            if (incomingMeta && incomingMeta.id === fileId) {
+                incomingMeta = null;
+                incomingChunks = [];
+                incomingCount = 0;
+            }
+        }
+
+        function onFileError(fileId, errMsg) {
+            if (transferStats[fileId]) transferStats[fileId].aborted = true;
+
+            const wrap = document.getElementById(fileId);
+            if (wrap) {
+                const metaEl = document.getElementById('meta-' + fileId);
+                if (metaEl) metaEl.textContent = metaEl.textContent.replace(/·.*/, `· ❌ Failed`);
+
+                // Remove progress elements
+                const pWrap = wrap.querySelector('.progress-wrap');
+                const pStats = wrap.querySelector('.progress-stats');
+                const btn = wrap.querySelector('.btn-decline');
+                if (pWrap) pWrap.remove();
+                if (pStats) pStats.remove();
+                if (btn) btn.remove();
+            }
+
+            sysMsg(`❌ Transfer failed: ${errMsg}`);
 
             // Clean up transfer states
             delete pendingOutgoing[fileId];
@@ -2065,7 +2179,8 @@
                 qr.addData(joinUrl);
                 qr.make();
                 container.innerHTML = qr.createImgTag(5, 8) +
-                    `<div class="qr-label">Scan to join \u00b7 or share the code above</div>`;
+                    `<div class="qr-label">Scan to join \u00b7 or share the code above</div>
+                     <button class="btn-secondary" style="margin-top: 15px; width: 100%;" onclick="cancelWait()">Cancel Room</button>`;
             } catch (e) {
                 console.warn('QR generation failed:', e);
                 container.innerHTML = '';
@@ -2208,11 +2323,39 @@
             ws.send(JSON.stringify({ type: 'request_connect', target: targetId }));
         }
 
-        function handleDiscoveryRequest(fromId, nick) {
+        function showCustomPrompt(title, message) {
+            return new Promise(resolve => {
+                const overlay = document.createElement('div');
+                overlay.className = 'custom-prompt-overlay';
+                overlay.innerHTML = `
+                    <div class="custom-prompt">
+                        <h3>${esc(title)}</h3>
+                        <p>${esc(message)}</p>
+                        <div class="custom-prompt-actions">
+                            <button class="btn-secondary" id="promptDecline">Decline</button>
+                            <button class="btn-primary" id="promptAccept">Accept</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+
+                document.getElementById('promptDecline').onclick = () => {
+                    overlay.remove();
+                    resolve(false);
+                };
+                document.getElementById('promptAccept').onclick = () => {
+                    overlay.remove();
+                    resolve(true);
+                };
+            });
+        }
+
+        async function handleDiscoveryRequest(fromId, nick) {
             const myNickSync = getNicknameSilent();
             if (!myNickSync) return;
 
-            if (confirm(`User ${nick} wants to connect with you via local network. Accept?`)) {
+            const accepted = await showCustomPrompt('Connection Request', `User ${nick} wants to connect with you via local network.`);
+            if (accepted) {
                 ws.send(JSON.stringify({ type: 'accept_connect', target: fromId }));
             } else {
                 ws.send(JSON.stringify({ type: 'decline_connect', target: fromId }));
@@ -2299,16 +2442,21 @@
         async function sendImageWithPreview(file, previewUrl) {
             if (!connected) return;
 
-            const buf = await file.arrayBuffer();
-            const totalChunks = Math.ceil(buf.byteLength / CHUNK);
+            const totalChunks = Math.ceil(file.size / CHUNK);
             const fileId = 'f' + Date.now();
             const useRTC = usingRTC && dataChannel && dataChannel.readyState === 'open';
 
-            // Store pending transfer
-            pendingOutgoing[fileId] = { buf, totalChunks, file, useRTC };
+            // Relay Mode File Size Limit Enforcement
+            if (!useRTC && file.size > 100 * 1024 * 1024) {
+                sysMsg(`❌ Cannot send image: File size (${fmtSize(file.size)}) exceeds the 100MB limit for Relay Mode.`);
+                return;
+            }
 
-            // Send file-request
-            const req = { kind: 'file-request', fileId, name: file.name, size: file.size, mime: file.type, totalChunks, useRTC };
+            // Store pending transfer with the File reference to slice incrementally
+            pendingOutgoing[fileId] = { buf: null, totalChunks, file, useRTC, isAutoImage: true };
+
+            // Send metadata request
+            const req = { kind: 'file-request', fileId, name: file.name, size: file.size, mime: file.type, totalChunks, useRTC, isAutoImage: true };
             relay(req);
 
             // Show sender's bubble with inline image preview
@@ -2319,9 +2467,12 @@
                 <div class="msg-nick">${esc(myNick)}</div>
                 <div class="msg image-msg" style="background:transparent; padding:4px;">
                     <img class="chat-image" src="${previewUrl}" alt="${esc(file.name)}" onclick="viewImage('${previewUrl}')" style="opacity:0.6; filter: grayscale(50%);">
-                    <div class="file-meta" id="meta-${fileId}" style="font-size:11px; color:var(--text-muted); opacity:0.8; text-align:right; margin-top:2px;">${fmtSize(file.size)} · ⏳ Waiting...</div>
+                    <div class="file-meta" id="meta-${fileId}" style="font-size:11px; color:var(--text-muted); opacity:0.8; text-align:right; margin-top:2px;">${fmtSize(file.size)} · Sending...</div>
                 </div>`;
             appendToChat(wrap);
+
+            // Auto bypass: start sending immediately without waiting for receiver Accept
+            startActualTransfer(fileId);
         }
 
         // ════════════════════════════════════════════════════════════
