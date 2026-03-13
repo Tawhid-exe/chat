@@ -188,11 +188,18 @@ wss.on('connection', (ws, req) => {
 
         const activeCode = ws.roomCode || myCode;
         if (activeCode && rooms[activeCode]) {
-            const other = rooms[activeCode].peers.find(p => p !== ws);
+            rooms[activeCode].peers = rooms[activeCode].peers.filter(p => p !== ws);
+
+            const other = rooms[activeCode].peers[0];
             if (other && other.readyState === 1) {
                 other.send(JSON.stringify({ type: 'peer_left' }));
             }
-            delete rooms[activeCode];
+
+            setTimeout(() => {
+                if (rooms[activeCode] && rooms[activeCode].peers.length === 0) {
+                    delete rooms[activeCode];
+                }
+            }, 30000);
         }
     });
 });

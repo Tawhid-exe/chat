@@ -1248,6 +1248,7 @@
         let incomingMeta = null;
         let incomingChunks = [];
         let incomingCount = 0;
+        let incomingStream = null;
         // Pending outgoing transfers waiting for receiver acceptance
         // fileId → { buf, meta, useRTC }
         let pendingOutgoing = {};
@@ -1266,14 +1267,25 @@
         // ════════════════════════════════════════════════════════════
         //  WEBSOCKET — Signaling + Chat + Fallback
         // ════════════════════════════════════════════════════════════
+        let isReconnecting = false;
+
         function connectWS() {
+            if (isReconnecting) return;
             ws = new WebSocket(WS_URL);
 
             ws.onopen = () => {
+                isReconnecting = false;
                 const stat = document.getElementById('serverStatus');
                 stat.innerHTML = '<div class="status-dot active"></div> Relay Server Online';
-                document.getElementById('createBtn').disabled = false;
-                document.getElementById('joinBtn').disabled = false;
+
+                if (connected && myCode) {
+                    // Re-join the active room seamlessly
+                    ws.send(JSON.stringify({ type: 'join', code: myCode }));
+                    sysMsg('⚡ Connection restored. Re-establishing secure link...');
+                } else {
+                    document.getElementById('createBtn').disabled = false;
+                    document.getElementById('joinBtn').disabled = false;
+                }
             };
 
             ws.onmessage = (e) => {
@@ -1283,9 +1295,19 @@
             };
 
             ws.onclose = () => {
-                if (connected) sysMsg('Connection to relay lost.');
-                else document.getElementById('serverStatus').innerHTML =
-                    '<div class="status-dot error"></div> Server Unreachable (Try Reloading)';
+                if (connected && myCode) {
+                    sysMsg('Connection interrupted. Attempting to reconnect...');
+                    updateModeBadge('connecting');
+                    isReconnecting = true;
+                    setTimeout(() => {
+                        isReconnecting = false;
+                        connectWS();
+                    }, 3000);
+                } else {
+                    if (connected) sysMsg('Connection to relay lost.');
+                    else document.getElementById('serverStatus').innerHTML =
+                        '<div class="status-dot error"></div> Server Unreachable (Try Reloading)';
+                }
             };
         }
 
@@ -1310,6 +1332,7 @@
                     break;
                 case 'peer_joined':
                     connected = true;
+                    if (pc) { pc.close(); pc = null; }
                     // IMMEDIATELY exchange nicks via WebSocket and open chat
                     // This guarantees chat works even if WebRTC completely fails
                     relay({ kind: 'nick_exchange', nick: myNick });
@@ -1391,8 +1414,15 @@
                     break;
                 case 'file-chunk':
                     if (!incomingMeta) return;
-                    incomingChunks[data.idx] = new Uint8Array(data.bytes);
-                    incomingCount++;
+
+                    if (incomingStream) {
+                        incomingStream.write(new Uint8Array(data.bytes)).catch(e => console.error("Stream write error:", e));
+                        incomingCount++;
+                    } else {
+                        incomingChunks[data.idx] = new Uint8Array(data.bytes);
+                        incomingCount++;
+                    }
+
                     if (incomingCount % 10 === 0 || incomingCount === incomingMeta.totalChunks) {
                         updateSpeedAndProgress(incomingMeta.id, incomingCount, incomingMeta.totalChunks, incomingMeta.size);
                     }
@@ -1435,6 +1465,7 @@
 
             pc.onicecandidate = (e) => {
                 if (e.candidate) {
+                    console.log('ICE candidate generated:', e.candidate.candidate);
                     relay({ kind: 'rtc_ice', candidate: e.candidate });
                 }
             };
@@ -1581,8 +1612,15 @@
             } else {
                 // Binary chunk via DataChannel - Store the raw ArrayBuffer without wrapping it in Uint8Array
                 if (!incomingMeta) return;
-                incomingChunks[incomingCount] = data;
-                incomingCount++;
+
+                if (incomingStream) {
+                    incomingStream.write(data).catch(e => console.error("Stream write error:", e));
+                    incomingCount++;
+                } else {
+                    incomingChunks[incomingCount] = data;
+                    incomingCount++;
+                }
+
                 if (incomingCount % 10 === 0 || incomingCount === incomingMeta.totalChunks) {
                     updateSpeedAndProgress(incomingMeta.id, incomingCount, incomingMeta.totalChunks, incomingMeta.size);
                 }
@@ -1959,7 +1997,21 @@
             appendToChat(wrap);
         }
 
-        function acceptFile(fileId) {
+        async function acceptFile(fileId) {
+            const wrap = document.getElementById(fileId);
+            const nameEl = wrap ? wrap.querySelector('.file-name') : null;
+            const fileName = nameEl ? nameEl.textContent : 'download';
+
+            try {
+                if (window.showSaveFilePicker) {
+                    const handle = await window.showSaveFilePicker({ suggestedName: fileName });
+                    incomingStream = await handle.createWritable();
+                }
+            } catch (err) {
+                if (err.name === 'AbortError') return; // User cancelled
+                console.warn('FSAP not supported or failed, using RAM Blob fallback', err);
+            }
+
             relay({ kind: 'file-accepted', fileId });
             // Replace buttons with progress bar and cancel button
             const actionsEl = document.querySelector(`#${fileId} .file-actions`);
@@ -1971,8 +2023,6 @@
             }
             const metaEl = document.getElementById('meta-' + fileId);
             if (metaEl) metaEl.textContent = metaEl.textContent.replace(/·.*/, '· Receiving...');
-            // Prepare incoming state
-            // (actual data will arrive via file-meta + file-chunk or DataChannel)
         }
 
         function declineFile(fileId) {
@@ -1992,7 +2042,7 @@
             onFileCancelled(fileId, 'You');
         }
 
-        function onFileCancelled(fileId, who) {
+        async function onFileCancelled(fileId, who) {
             // Mark internal state as aborted
             if (transferStats[fileId]) transferStats[fileId].aborted = true;
 
@@ -2014,13 +2064,17 @@
             delete pendingOutgoing[fileId];
             delete transferStats[fileId];
             if (incomingMeta && incomingMeta.id === fileId) {
+                if (incomingStream) {
+                    try { await incomingStream.abort(); } catch (e) { }
+                    incomingStream = null;
+                }
                 incomingMeta = null;
                 incomingChunks = [];
                 incomingCount = 0;
             }
         }
 
-        function onFileError(fileId, errMsg) {
+        async function onFileError(fileId, errMsg) {
             if (transferStats[fileId]) transferStats[fileId].aborted = true;
 
             const wrap = document.getElementById(fileId);
@@ -2043,14 +2097,46 @@
             delete pendingOutgoing[fileId];
             delete transferStats[fileId];
             if (incomingMeta && incomingMeta.id === fileId) {
+                if (incomingStream) {
+                    try { await incomingStream.abort(); } catch (e) { }
+                    incomingStream = null;
+                }
                 incomingMeta = null;
                 incomingChunks = [];
                 incomingCount = 0;
             }
         }
 
-        function assembleFile() {
+        async function assembleFile() {
             const meta = incomingMeta;
+
+            if (incomingStream) {
+                try {
+                    await incomingStream.close();
+                } catch (e) {
+                    console.error("Error closing stream", e);
+                }
+                incomingStream = null;
+
+                const wrap = document.getElementById(meta.id);
+                if (wrap) {
+                    const msgDiv = wrap.querySelector('.msg');
+                    // Remove progress stats and cancel button
+                    const statsEl = wrap.querySelector('.progress-stats');
+                    const cancelBtn = wrap.querySelector('.btn-decline');
+                    const progressWrap = wrap.querySelector('.progress-wrap');
+                    if (statsEl) statsEl.remove();
+                    if (cancelBtn) cancelBtn.remove();
+                    if (progressWrap) progressWrap.remove();
+
+                    const metaEl = document.getElementById('meta-' + meta.id);
+                    if (metaEl) metaEl.textContent = `${fmtSize(meta.size)} · ✓ Saved to Disk`;
+                }
+
+                delete transferStats[meta.id];
+                incomingMeta = null; incomingChunks = []; incomingCount = 0;
+                return;
+            }
 
             // Zero-copy Blob creation: Pass the array of ArrayBuffers (or Uint8Arrays from relay) directly to the Blob constructor.
             // This prevents the browser from allocating a massive contiguous chunk of RAM and manually copying every byte via out.set(),
@@ -2146,6 +2232,17 @@
             navigator.clipboard.writeText(myCode).then(() => sysMsg('Passcode copied to clipboard.'));
         }
         function disconnect() { if (pc) { pc.close(); pc = null; } if (ws) ws.close(); location.reload(); }
+
+        function cancelWait() {
+            if (timerInterval) clearInterval(timerInterval);
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                // If there's a specific message needed for the server to delete the room early, add it here.
+                // Currently, closing the socket will let the server handle it on 'close' event.
+                ws.close();
+            }
+            location.reload();
+        }
+
         function triggerDownload(url, name) { const a = document.createElement('a'); a.href = url; a.download = name; a.click(); }
         function fmtSize(b) {
             if (b < 1024) return b + ' B';
