@@ -1236,6 +1236,7 @@
         let rtcConnected = false;
         let usingRTC = false;    // true = WebRTC data channel active
         let rtcFallbackTimer = null; // timer to detect RTC failure
+        let iceCandidateQueue = []; // Queue for early ICE candidates
 
         // File transfer state
         let incomingMeta = null;
@@ -1447,6 +1448,7 @@
         //  WebRTC — P2P Connection (background upgrade for files)
         // ════════════════════════════════════════════════════════════
         function startWebRTC(initiator) {
+            iceCandidateQueue = []; // Clear any stale candidates on restart
             isInitiator = initiator;
             updateModeBadge('relay'); // Start as relay, upgrade to P2P if WebRTC succeeds
 
@@ -1608,6 +1610,11 @@
             startWebRTC(false);
             try {
                 await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+                // Process any ICE candidates that arrived while setting remote description
+                while (iceCandidateQueue.length > 0) {
+                    const candidate = iceCandidateQueue.shift();
+                    await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.warn('Queued ICE error:', e));
+                }
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
                 relay({ kind: 'rtc_answer', sdp: answer });
@@ -1617,12 +1624,25 @@
         }
 
         async function handleAnswer(sdp) {
-            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+                while (iceCandidateQueue.length > 0) {
+                    const candidate = iceCandidateQueue.shift();
+                    await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.warn('Queued ICE error:', e));
+                }
+            } catch (e) {
+                console.warn('Handling answer failed:', e);
+            }
         }
 
         async function handleIce(candidate) {
             try {
-                if (pc && candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                if (!pc || !pc.remoteDescription || !pc.remoteDescription.type) {
+                    // Queue candidate if remote description is not set yet
+                    iceCandidateQueue.push(candidate);
+                } else {
+                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                }
             } catch (e) { console.warn('ICE error:', e); }
         }
 
