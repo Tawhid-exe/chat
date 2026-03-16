@@ -1178,19 +1178,31 @@
         let myPeerId = Math.random().toString(36).substr(2, 9);
         let nickTimeout = null;
 
-        // ICE servers: multiple STUN + TURN fallbacks
-        // Priority: Google STUN (free, unlimited) → OpenRelay TURN → ExpressTURN → Cloudflare TURN
+        // ICE servers: robust public STUN configuration to punch through typical NATs
+        // (Free TURN servers are unreliable, so we prioritize heavy STUN redundancy and 
+        // fall back to our own Node WebSocket Relay if WebRTC fails outright).
         const ICE_SERVERS = [
-            // Google STUN — always free, unlimited
+            // Standard Google STUN
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
             { urls: 'stun:stun2.l.google.com:19302' },
             { urls: 'stun:stun3.l.google.com:19302' },
             { urls: 'stun:stun4.l.google.com:19302' },
-            // OpenRelay (Metered) — 20GB/month free TURN, ports 80/443, SSL bypass
-            {
-                urls: 'stun:openrelay.metered.ca:80'
-            },
+            
+            // Cloudflare STUN (Fast, global CDN routing)
+            { urls: 'stun:stun.cloudflare.com:3478' },
+            
+            // Twilio STUN (Highly reliable)
+            { urls: 'stun:global.stun.twilio.com:3478' },
+
+            // Additional independent reliable STUNs
+            { urls: 'stun:stun.stunprotocol.org:3478' },
+            { urls: 'stun:stun.voip.blackberry.com:3478' },
+            { urls: 'stun:stun.nextcloud.com:443' },
+            { urls: 'stun:stun.schlund.de:3478' },
+            { urls: 'stun:stun.miwifi.com:3478' },
+            
+            // OpenRelay Free TURN (Often rate-limited, but good to include as final shot)
             {
                 urls: 'turn:openrelay.metered.ca:80',
                 username: 'openrelayproject',
@@ -1200,27 +1212,7 @@
                 urls: 'turn:openrelay.metered.ca:443',
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
-            },
-            {
-                urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-            },
-            // ExpressTURN — 1000GB/month free
-            {
-                urls: 'stun:stun.expressturn.com:3478'
-            },
-            {
-                urls: 'turn:stun.expressturn.com:3478',
-                username: 'efUN6XXXXXXXXXXX',   // placeholder — works without for STUN
-                credential: 'expressturn'
-            },
-            // Cloudflare STUN (public)
-            { urls: 'stun:stun.cloudflare.com:3478' },
-            // Additional public STUN servers
-            { urls: 'stun:stun.stunprotocol.org:3478' },
-            { urls: 'stun:stun.voip.blackberry.com:3478' },
-            { urls: 'stun:stun.nextcloud.com:443' },
+            }
         ];
 
         // ════════════════════════════════════════════════════════════
