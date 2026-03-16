@@ -1606,8 +1606,12 @@
         }
 
         async function handleOffer(sdp) {
-            if (pc) { pc.close(); pc = null; } // Cleanup any stale PC state on new offer
-            startWebRTC(false);
+            // Only create a new pc if we don't have one yet.
+            // peer_joined already called startWebRTC(false) which created a fresh pc waiting for an offer.
+            // Destroying it here was the bug — it killed the pc the initiator's offer was meant for.
+            if (!pc) {
+                startWebRTC(false);
+            }
             try {
                 await pc.setRemoteDescription(new RTCSessionDescription(sdp));
                 // Process any ICE candidates that arrived while setting remote description
