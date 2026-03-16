@@ -1237,6 +1237,7 @@
         let usingRTC = false;    // true = WebRTC data channel active
         let rtcFallbackTimer = null; // timer to detect RTC failure
         let iceCandidateQueue = []; // Queue for early ICE candidates
+        let rtcRetryCount = 0;      // Track P2P retry attempts (max 2)
 
         // File transfer state
         let incomingMeta = null;
@@ -1511,6 +1512,7 @@
                     clearTimeout(rtcFallbackTimer);
                     rtcConnected = true;
                     usingRTC = true;
+                    rtcRetryCount = 0; // Reset retry counter on success
 
                     // Wait a moment for WebRTC to settle on the optimal candidate pair
                     setTimeout(async () => {
@@ -1542,7 +1544,6 @@
                     rtcConnected = false;
                     usingRTC = false;
                     updateModeBadge('relay');
-                    if (state === 'failed') sysMsg('ℹ️ P2P dropped — falling back to relay.');
 
                     // Abort active RTC transfers so they can be securely restarted by the user if needed
                     Object.keys(pendingOutgoing).forEach(fileId => {
@@ -1554,14 +1555,21 @@
                         onFileError(incomingMeta.id, "P2P Connection interrupted.");
                     }
 
-                    // Attempt graceful automated P2P restart if session is still alive
-                    if (connected && isInitiator) {
-                        sysMsg('🔄 Attempting to re-establish P2P/LAN connection...');
+                    rtcRetryCount++;
+
+                    // Only retry P2P up to 2 times, then silently stay on relay
+                    if (connected && isInitiator && rtcRetryCount <= 2) {
+                        if (rtcRetryCount === 1) {
+                            sysMsg('ℹ️ P2P unavailable — using relay. Retrying P2P in background...');
+                        }
                         setTimeout(() => {
                             if (connected && !rtcConnected) {
                                 startWebRTC(true);
                             }
-                        }, 3000);
+                        }, 5000);
+                    } else if (state === 'failed' && rtcRetryCount > 2) {
+                        // Silently accept relay — no more spam
+                        console.log('P2P retry limit reached, staying on relay.');
                     }
                 }
             };
