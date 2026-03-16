@@ -1178,9 +1178,11 @@
         let myPeerId = Math.random().toString(36).substr(2, 9);
         let nickTimeout = null;
 
-        // ICE servers: proven reliable public STUN servers only
-        // (Invalid/slow TURN credentials can delay ICE gathering and cause timeouts)
+        // ICE servers: STUN for IP discovery + TURN for NAT traversal across different networks
+        // Without TURN, WebRTC can ONLY connect on the same LAN. Different WiFi networks
+        // use port-restricted NAT which blocks STUN-based connections.
         const ICE_SERVERS = [
+            // STUN — discover public IP
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
             { urls: 'stun:stun2.l.google.com:19302' },
@@ -1188,7 +1190,30 @@
             { urls: 'stun:stun4.l.google.com:19302' },
             { urls: 'stun:stun.cloudflare.com:3478' },
             { urls: 'stun:global.stun.twilio.com:3478' },
-            { urls: 'stun:stun.stunprotocol.org:3478' },
+            // TURN — REQUIRED for different WiFi/mobile networks (punches through restrictive NATs)
+            {
+                urls: 'stun:stun.relay.metered.ca:80'
+            },
+            {
+                urls: 'turn:global.relay.metered.ca:80',
+                username: 'e53cc552bfc8e24394669199',
+                credential: 'nHUk+SnIjEYrIWHq'
+            },
+            {
+                urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+                username: 'e53cc552bfc8e24394669199',
+                credential: 'nHUk+SnIjEYrIWHq'
+            },
+            {
+                urls: 'turn:global.relay.metered.ca:443',
+                username: 'e53cc552bfc8e24394669199',
+                credential: 'nHUk+SnIjEYrIWHq'
+            },
+            {
+                urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+                username: 'e53cc552bfc8e24394669199',
+                credential: 'nHUk+SnIjEYrIWHq'
+            },
         ];
 
         // ════════════════════════════════════════════════════════════
