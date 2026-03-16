@@ -150,6 +150,10 @@ wss.on('connection', (ws, req) => {
                 ws.send(JSON.stringify({ type: 'error', msg: 'Room not found.' }));
                 return;
             }
+            
+            // Cleanup dead peers proactively to allow rapid reconnects
+            room.peers = room.peers.filter(p => p.readyState === 1);
+
             if (room.peers.length >= 2) {
                 ws.send(JSON.stringify({ type: 'error', msg: 'Room full.' }));
                 return;

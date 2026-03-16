@@ -1235,6 +1235,7 @@
         let timerInterval = null;
         let chatVisible = false;  // tracks if chat screen is already shown
         let lanMode = false;      // LAN mode active
+        let peerDisconnectTimer = null;
 
         // WebRTC state
         let pc = null;           // RTCPeerConnection
@@ -1249,6 +1250,7 @@
         let incomingChunks = [];
         let incomingCount = 0;
         let incomingStream = null;
+        let opfsFileHandle = null;
         // Pending outgoing transfers waiting for receiver acceptance
         // fileId → { buf, meta, useRTC }
         let pendingOutgoing = {};
@@ -1331,6 +1333,11 @@
                     }
                     break;
                 case 'peer_joined':
+                    if (peerDisconnectTimer) {
+                        clearTimeout(peerDisconnectTimer);
+                        peerDisconnectTimer = null;
+                        sysMsg('Peer reconnected successfully.');
+                    }
                     connected = true;
                     if (pc) { pc.close(); pc = null; }
                     // IMMEDIATELY exchange nicks via WebSocket and open chat
@@ -1343,13 +1350,20 @@
                     onRelayData(msg.data);
                     break;
                 case 'peer_left':
-                    connected = false;
-                    rtcConnected = false;
-                    usingRTC = false;
+                    if (peerDisconnectTimer) clearTimeout(peerDisconnectTimer);
                     enableChat(false);
-                    sysMsg('Peer disconnected.');
-                    document.getElementById('chatSubtext').innerHTML = '🔴 Session Terminated';
-                    updateModeBadge('disconnected');
+                    updateModeBadge('connecting');
+                    document.getElementById('chatSubtext').innerHTML = `⏳ Waiting for ${esc(peerNick)} to reconnect (30s)...`;
+                    sysMsg('Peer disconnected. Waiting for reconnection...');
+                    
+                    peerDisconnectTimer = setTimeout(() => {
+                        connected = false;
+                        rtcConnected = false;
+                        usingRTC = false;
+                        sysMsg('Peer connection lost permanently.');
+                        document.getElementById('chatSubtext').innerHTML = '🔴 Session Terminated';
+                        updateModeBadge('disconnected');
+                    }, 30000);
                     break;
                 case 'error':
                     setJoinStatus(msg.msg || 'Unknown error', 'error');
@@ -1534,7 +1548,27 @@
                     rtcConnected = false;
                     usingRTC = false;
                     updateModeBadge('relay');
-                    if (state === 'failed') sysMsg('ℹ️ P2P unavailable — using relay for files.');
+                    if (state === 'failed') sysMsg('ℹ️ P2P dropped — falling back to relay.');
+
+                    // Abort active RTC transfers so they can be securely restarted by the user if needed
+                    Object.keys(pendingOutgoing).forEach(fileId => {
+                        if (pendingOutgoing[fileId].useRTC) {
+                            onFileError(fileId, "P2P Connection interrupted. Please start transfer again.");
+                        }
+                    });
+                    if (incomingMeta && incomingMeta.useRTC) {
+                        onFileError(incomingMeta.id, "P2P Connection interrupted.");
+                    }
+
+                    // Attempt graceful automated P2P restart if session is still alive
+                    if (connected && isInitiator) {
+                        sysMsg('🔄 Attempting to re-establish P2P/LAN connection...');
+                        setTimeout(() => {
+                            if (connected && !rtcConnected) {
+                                startWebRTC(true);
+                            }
+                        }, 3000);
+                    }
                 }
             };
 
@@ -1578,11 +1612,16 @@
         }
 
         async function handleOffer(sdp) {
-            if (!pc) startWebRTC(false);
-            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            relay({ kind: 'rtc_answer', sdp: answer });
+            if (pc) { pc.close(); pc = null; } // Cleanup any stale PC state on new offer
+            startWebRTC(false);
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                relay({ kind: 'rtc_answer', sdp: answer });
+            } catch (e) {
+                console.warn('Handling offer failed:', e);
+            }
         }
 
         async function handleAnswer(sdp) {
@@ -2002,14 +2041,32 @@
             const nameEl = wrap ? wrap.querySelector('.file-name') : null;
             const fileName = nameEl ? nameEl.textContent : 'download';
 
+            let isFSAP = false;
             try {
                 if (window.showSaveFilePicker) {
                     const handle = await window.showSaveFilePicker({ suggestedName: fileName });
                     incomingStream = await handle.createWritable();
+                    isFSAP = true;
                 }
             } catch (err) {
                 if (err.name === 'AbortError') return; // User cancelled
-                console.warn('FSAP not supported or failed, using RAM Blob fallback', err);
+                console.warn('FSAP not supported or failed, preparing fallback', err);
+            }
+
+            // OPFS Fallback for preventing RAM crashes on mobile devices
+            if (!isFSAP && navigator.storage && navigator.storage.getDirectory) {
+                try {
+                    const root = await navigator.storage.getDirectory();
+                    opfsFileHandle = await root.getFileHandle(fileId, { create: true });
+                    incomingStream = await opfsFileHandle.createWritable();
+                    sysMsg(`ℹ️ Using Secure Storage (OPFS) to prevent memory crash for large file.`);
+                } catch (e) {
+                    console.warn("OPFS stream creation failed:", e);
+                }
+            }
+
+            if (!incomingStream) {
+                sysMsg(`⚠️ Warning: Direct disk writing unsupported on this browser. File will buffer in RAM.`);
             }
 
             relay({ kind: 'file-accepted', fileId });
@@ -2118,19 +2175,31 @@
                 }
                 incomingStream = null;
 
-                const wrap = document.getElementById(meta.id);
-                if (wrap) {
-                    const msgDiv = wrap.querySelector('.msg');
-                    // Remove progress stats and cancel button
-                    const statsEl = wrap.querySelector('.progress-stats');
-                    const cancelBtn = wrap.querySelector('.btn-decline');
-                    const progressWrap = wrap.querySelector('.progress-wrap');
-                    if (statsEl) statsEl.remove();
-                    if (cancelBtn) cancelBtn.remove();
-                    if (progressWrap) progressWrap.remove();
+                if (opfsFileHandle) {
+                    // Extract from OPFS to generate download link
+                    try {
+                        const blob = await opfsFileHandle.getFile();
+                        const url = URL.createObjectURL(blob);
+                        finalizeFileUI(meta, url, blob.size);
+                    } catch (e) {
+                        console.error("Failed to generate OPFS file URL", e);
+                    }
+                    opfsFileHandle = null;
+                } else {
+                    // FSAP - File already on disk where user selected
+                    const wrap = document.getElementById(meta.id);
+                    if (wrap) {
+                        const msgDiv = wrap.querySelector('.msg');
+                        const statsEl = wrap.querySelector('.progress-stats');
+                        const cancelBtn = wrap.querySelector('.btn-decline');
+                        const progressWrap = wrap.querySelector('.progress-wrap');
+                        if (statsEl) statsEl.remove();
+                        if (cancelBtn) cancelBtn.remove();
+                        if (progressWrap) progressWrap.remove();
 
-                    const metaEl = document.getElementById('meta-' + meta.id);
-                    if (metaEl) metaEl.textContent = `${fmtSize(meta.size)} · ✓ Saved to Disk`;
+                        const metaEl = document.getElementById('meta-' + meta.id);
+                        if (metaEl) metaEl.textContent = `${fmtSize(meta.size)} · ✓ Saved to Disk`;
+                    }
                 }
 
                 delete transferStats[meta.id];
@@ -2143,6 +2212,14 @@
             // which saves Gigabytes of memory and prevents mobile garbage collector freezing.
             const blob = new Blob(incomingChunks, { type: meta.mime });
             const url = URL.createObjectURL(blob);
+            
+            finalizeFileUI(meta, url, meta.size);
+
+            delete transferStats[meta.id];
+            incomingMeta = null; incomingChunks = []; incomingCount = 0;
+        }
+
+        function finalizeFileUI(meta, url, blobSize) {
             const isImage = meta.mime && meta.mime.startsWith('image/');
 
             const wrap = document.getElementById(meta.id);
@@ -2161,7 +2238,7 @@
                     msgDiv.innerHTML = `
                         <img class="chat-image" src="${url}" alt="${esc(meta.name)}" onclick="viewImage('${url}')">
                         <div style="display:flex; justify-content:flex-end; padding:2px 4px 2px 0;">
-                            <a href="${url}" download="${esc(meta.name)}" style="color:var(--text-muted); font-size:11px; text-decoration:none; display:flex; gap:4px; align-items:center;">⬇️ Download · ${fmtSize(meta.size)}</a>
+                            <a href="${url}" download="${esc(meta.name)}" style="color:var(--text-muted); font-size:11px; text-decoration:none; display:flex; gap:4px; align-items:center;">⬇️ Download · ${fmtSize(blobSize)}</a>
                         </div>`;
                     msgDiv.classList.remove('file-msg');
                     msgDiv.classList.add('image-msg');
@@ -2169,15 +2246,13 @@
                     msgDiv.style.padding = '4px';
                 } else {
                     const metaEl = document.getElementById('meta-' + meta.id);
-                    if (metaEl) metaEl.textContent = `${fmtSize(meta.size)} · ⬇ Tap to Download`;
+                    if (metaEl) metaEl.textContent = `${fmtSize(blobSize)} · ⬇ Tap to Download`;
                     if (msgDiv) {
                         msgDiv.style.cursor = 'pointer';
                         msgDiv.onclick = () => triggerDownload(url, meta.name);
                     }
                 }
             }
-            delete transferStats[meta.id];
-            incomingMeta = null; incomingChunks = []; incomingCount = 0;
         }
 
         function appendFileProgress(meta, senderName, mode) {
