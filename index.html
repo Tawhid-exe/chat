@@ -1178,41 +1178,17 @@
         let myPeerId = Math.random().toString(36).substr(2, 9);
         let nickTimeout = null;
 
-        // ICE servers: robust public STUN configuration to punch through typical NATs
-        // (Free TURN servers are unreliable, so we prioritize heavy STUN redundancy and 
-        // fall back to our own Node WebSocket Relay if WebRTC fails outright).
+        // ICE servers: proven reliable public STUN servers only
+        // (Invalid/slow TURN credentials can delay ICE gathering and cause timeouts)
         const ICE_SERVERS = [
-            // Standard Google STUN
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
             { urls: 'stun:stun2.l.google.com:19302' },
             { urls: 'stun:stun3.l.google.com:19302' },
             { urls: 'stun:stun4.l.google.com:19302' },
-            
-            // Cloudflare STUN (Fast, global CDN routing)
             { urls: 'stun:stun.cloudflare.com:3478' },
-            
-            // Twilio STUN (Highly reliable)
             { urls: 'stun:global.stun.twilio.com:3478' },
-
-            // Additional independent reliable STUNs
             { urls: 'stun:stun.stunprotocol.org:3478' },
-            { urls: 'stun:stun.voip.blackberry.com:3478' },
-            { urls: 'stun:stun.nextcloud.com:443' },
-            { urls: 'stun:stun.schlund.de:3478' },
-            { urls: 'stun:stun.miwifi.com:3478' },
-            
-            // OpenRelay Free TURN (Often rate-limited, but good to include as final shot)
-            {
-                urls: 'turn:openrelay.metered.ca:80',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-            },
-            {
-                urls: 'turn:openrelay.metered.ca:443',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-            }
         ];
 
         // ════════════════════════════════════════════════════════════
@@ -1238,6 +1214,7 @@
         let rtcFallbackTimer = null; // timer to detect RTC failure
         let iceCandidateQueue = []; // Queue for early ICE candidates
         let rtcRetryCount = 0;      // Track P2P retry attempts (max 2)
+        let pcGeneration = 0;       // Tracks which pc instance is current (prevents stale callbacks)
 
         // File transfer state
         let incomingMeta = null;
@@ -1333,7 +1310,14 @@
                         sysMsg('Peer reconnected successfully.');
                     }
                     connected = true;
-                    if (pc) { pc.close(); pc = null; }
+                    // Detach callbacks from old pc BEFORE closing to prevent stale events
+                    if (pc) {
+                        pc.onicecandidate = null;
+                        pc.onconnectionstatechange = null;
+                        pc.ondatachannel = null;
+                        pc.close();
+                        pc = null;
+                    }
                     // IMMEDIATELY exchange nicks via WebSocket and open chat
                     // This guarantees chat works even if WebRTC completely fails
                     relay({ kind: 'nick_exchange', nick: myNick });
@@ -1451,20 +1435,21 @@
         function startWebRTC(initiator) {
             iceCandidateQueue = []; // Clear any stale candidates on restart
             isInitiator = initiator;
-            updateModeBadge('relay'); // Start as relay, upgrade to P2P if WebRTC succeeds
+            updateModeBadge('connecting'); // Show connecting state while negotiating
 
-            // Set a timeout — if WebRTC doesn't connect in 10s, stay in relay mode
+            // Set a timeout — if WebRTC doesn't connect in 15s, stay in relay mode
             if (rtcFallbackTimer) clearTimeout(rtcFallbackTimer);
             rtcFallbackTimer = setTimeout(() => {
                 if (!usingRTC) {
                     updateModeBadge('relay');
                     console.log('WebRTC timed out — staying in relay mode');
                 }
-            }, 10000);
+            }, 15000);
+
+            // Increment generation so stale callbacks from old pc instances are ignored
+            const thisGeneration = ++pcGeneration;
 
             try {
-                // We always provide ICE servers. If the devices are on the same LAN, WebRTC will naturally prioritize local 'host' candidates.
-                // If local UDP is blocked by a firewall, it seamlessly falls back to STUN (Hairpinning) instead of failing.
                 pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
             } catch (e) {
                 console.warn('WebRTC not supported:', e);
@@ -1473,16 +1458,16 @@
             }
 
             pc.onicecandidate = (e) => {
+                if (pcGeneration !== thisGeneration) return; // Stale pc, ignore
                 if (e.candidate) {
-                    console.log('ICE candidate generated:', e.candidate.candidate);
                     relay({ kind: 'rtc_ice', candidate: e.candidate });
                 }
             };
 
             // Function to check if the connection is truly local (host/prflx candidates)
-            const checkLocalPath = async (pc) => {
+            const checkLocalPath = async (pcRef) => {
                 try {
-                    const stats = await pc.getStats();
+                    const stats = await pcRef.getStats();
                     let isLocal = false;
                     stats.forEach(report => {
                         if (report.type === 'transport') {
@@ -1490,8 +1475,6 @@
                             if (pair) {
                                 const local = stats.get(pair.localCandidateId);
                                 const remote = stats.get(pair.remoteCandidateId);
-                                // Allow 'host' or 'prflx' (peer-reflexive). 
-                                // 'srflx' (STUN hairpin) and 'relay' (TURN) are strictly internet.
                                 if (local && remote) {
                                     const allowed = ['host', 'prflx'];
                                     if (allowed.includes(local.candidateType) && allowed.includes(remote.candidateType)) {
@@ -1506,22 +1489,24 @@
             };
 
             pc.onconnectionstatechange = () => {
+                // CRITICAL: Ignore events from stale/old pc instances
+                if (pcGeneration !== thisGeneration) return;
+                if (!pc) return;
+
                 const state = pc.connectionState;
-                console.log('RTC connection state:', state);
+                console.log('RTC connection state:', state, '(gen:', thisGeneration, ')');
                 if (state === 'connected') {
                     clearTimeout(rtcFallbackTimer);
                     rtcConnected = true;
                     usingRTC = true;
-                    rtcRetryCount = 0; // Reset retry counter on success
+                    rtcRetryCount = 0;
 
-                    // Wait a moment for WebRTC to settle on the optimal candidate pair
                     setTimeout(async () => {
-                        if (pc.connectionState !== 'connected') return;
+                        if (!pc || pc.connectionState !== 'connected') return;
+                        if (pcGeneration !== thisGeneration) return;
                         const trulyLocal = await checkLocalPath(pc);
                         if (trulyLocal) {
                             CHUNK = CHUNK_SIZE_LAN;
-
-                            // Even if they joined via manual QR/Code, if WebRTC finds a local path, upgrade the UI to LAN Direct seamlessly.
                             if (!document.getElementById('setupScreen').classList.contains('hidden')) {
                                 document.getElementById('setupScreen').classList.add('hidden');
                                 document.getElementById('chatScreen').style.display = 'flex';
@@ -1530,13 +1515,12 @@
                                 document.getElementById('chatSubtext').innerHTML = `🟢 Connected to <strong>${esc(peerNick)}</strong>`;
                                 sysMsg('⚡ Upgraded to LAN Direct mode automatically.');
                             }
-
                             updateModeBadge('lan_p2p');
                             sysMsg('⚡ WebRTC LAN Direct active — files transfer at full local Wi-Fi speed offline.');
                         } else {
                             CHUNK = CHUNK_SIZE_DEFAULT;
                             updateModeBadge('p2p');
-                            sysMsg('🔒 WebRTC P2P (Internet) active — transfer routed via STUN Hairpinning. Set Windows Network to Private to allow offline LAN Direct speeds.');
+                            sysMsg('🔒 WebRTC P2P (Internet) active.');
                         }
                     }, 500);
 
@@ -1545,7 +1529,6 @@
                     usingRTC = false;
                     updateModeBadge('relay');
 
-                    // Abort active RTC transfers so they can be securely restarted by the user if needed
                     Object.keys(pendingOutgoing).forEach(fileId => {
                         if (pendingOutgoing[fileId].useRTC) {
                             onFileError(fileId, "P2P Connection interrupted. Please start transfer again.");
@@ -1557,7 +1540,6 @@
 
                     rtcRetryCount++;
 
-                    // Only retry P2P up to 2 times, then silently stay on relay
                     if (connected && isInitiator && rtcRetryCount <= 2) {
                         if (rtcRetryCount === 1) {
                             sysMsg('ℹ️ P2P unavailable — using relay. Retrying P2P in background...');
@@ -1567,14 +1549,14 @@
                                 startWebRTC(true);
                             }
                         }, 5000);
-                    } else if (state === 'failed' && rtcRetryCount > 2) {
-                        // Silently accept relay — no more spam
+                    } else if (rtcRetryCount > 2) {
                         console.log('P2P retry limit reached, staying on relay.');
                     }
                 }
             };
 
             pc.ondatachannel = (e) => {
+                if (pcGeneration !== thisGeneration) return;
                 setupDataChannel(e.channel);
             };
 

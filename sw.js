@@ -1,4 +1,4 @@
-const CACHE_NAME = 'donkeychat-v1';
+const CACHE_NAME = 'donkeychat-v2';
 const ASSETS = [
     '/',
     '/index.html',
@@ -28,23 +28,36 @@ self.addEventListener('activate', (e) => {
     self.clients.claim();
 });
 
-// Fetch — cache-first for assets, network-first for API/WS
+// Fetch — network-first for HTML (ensures deployments reach users), cache-first for static assets
 self.addEventListener('fetch', (e) => {
     // Skip WebSocket and non-GET requests
     if (e.request.url.startsWith('ws') || e.request.method !== 'GET') return;
 
+    // For HTML navigation requests: ALWAYS try network first so code updates are instant
+    if (e.request.mode === 'navigate' || e.request.destination === 'document') {
+        e.respondWith(
+            fetch(e.request).then(response => {
+                if (response.ok) {
+                    const clone = response.clone();
+                    caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+                }
+                return response;
+            }).catch(() => caches.match(e.request) || caches.match('/index.html'))
+        );
+        return;
+    }
+
+    // For static assets (JS, CSS, images): cache-first for speed
     e.respondWith(
         caches.match(e.request).then(cached => {
             if (cached) return cached;
             return fetch(e.request).then(response => {
-                // Cache successful responses
                 if (response.ok) {
                     const clone = response.clone();
                     caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
                 }
                 return response;
             }).catch(() => {
-                // Offline fallback
                 if (e.request.destination === 'document') {
                     return caches.match('/index.html');
                 }
